@@ -1,0 +1,449 @@
+﻿using EInvoiceQuickBooks.Models;
+using Intuit.Ipp.Core;
+using Intuit.Ipp.Data;
+using Intuit.Ipp.DataService;
+using Intuit.Ipp.QueryFilter;
+using Intuit.Ipp.Security;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
+using System.Security.Authentication;
+using System.Security.Claims;
+using System.Security.Policy;
+using System.Text;
+using System.Text.Json;
+using Intuit.Ipp.OAuth2PlatformClient;
+using EInvoiceQuickBooks.Models1;
+using Intuit.Ipp.Core.Configuration;
+using Newtonsoft.Json.Linq;
+using System.Net.Http.Headers;
+using System;
+using Intuit.Ipp.Exception;
+using System.Net.Http;
+using System.Xml.Serialization;
+
+namespace EInvoiceQuickBooks.Services
+{
+    public class InvoiceService
+    {
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly QuickBooksSettings _qBooksConfig;
+        private readonly string realmId;
+        private readonly string clientId;
+        private readonly string clientKey;
+        //private readonly string accessToken;
+        private readonly string refreshToken;
+
+        public InvoiceService(IHttpClientFactory httpClientFactory, IOptions<QuickBooksSettings> quickBooksSettings)
+        {
+            _httpClientFactory = httpClientFactory;
+            _qBooksConfig = quickBooksSettings.Value;
+            realmId = _qBooksConfig.RealmId;
+            clientId = _qBooksConfig.ClientId;
+            clientKey = _qBooksConfig.ClientSecret;
+            //accessToken = _qBooksConfig.AccessToken;
+            refreshToken = _qBooksConfig.RefreshToken;
+        }
+
+        public async Task<Invoice> GetInvoiceAsync(string invoiceId)
+        {
+            try
+            {
+                var accessToken = await GetAccessToken();
+                var oauthValidator = new OAuth2RequestValidator(accessToken);
+                var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
+                var dataService = new DataService(serviceContext);
+                serviceContext.IppConfiguration.Message.Request.SerializationFormat = Intuit.Ipp.Core.Configuration.SerializationFormat.Json;
+                serviceContext.IppConfiguration.Message.Response.SerializationFormat = Intuit.Ipp.Core.Configuration.SerializationFormat.Json;
+                var invoice = dataService.FindById(new Invoice { Id = invoiceId });
+
+                return invoice;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+
+        public async Task<object> GetInvoicePDFAsync(string invoiceId)
+        {
+            try
+            {
+                var accessToken = await GetAccessToken();
+                var oauthValidator = new OAuth2RequestValidator(accessToken);
+                var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
+                var dataService = new DataService(serviceContext);
+
+                var pdfInvoice = dataService.GetPdf(new Invoice { Id = invoiceId });
+
+                var base64String = Convert.ToBase64String(pdfInvoice);
+                return base64String;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+
+        public async Task<Invoice> UpdateInvoice(Invoice invoiceToUpdate)
+        {
+            try
+            {
+                var accessToken = await GetAccessToken();
+                var oauthValidator = new OAuth2RequestValidator(accessToken);
+                var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
+                var dataService = new DataService(serviceContext);
+
+                serviceContext.IppConfiguration.Message.Request.SerializationFormat = Intuit.Ipp.Core.Configuration.SerializationFormat.Json;
+                serviceContext.IppConfiguration.Message.Response.SerializationFormat = Intuit.Ipp.Core.Configuration.SerializationFormat.Json;
+
+                var updatedInvoice = dataService.Update(invoiceToUpdate);
+
+                return updatedInvoice;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+
+        public async Task<CreateOrUpdateInvoiceResponse> CreateOrUpdateInvoice(object invoiceUpdate)
+        {
+            try
+            {
+                var content = new StringContent(invoiceUpdate.ToString(), Encoding.UTF8, "application/json");
+                var accessToken = await GetAccessToken();
+                using (var httpClient = new HttpClient())
+                {
+                    httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                    httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
+
+                    var response = await httpClient.PostAsync($"{_qBooksConfig.BaseUrl}/v3/company/{realmId}/invoice?minorversion=73", content);
+                    var responseBody = await response.Content.ReadAsStringAsync();
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var responseJson = JObject.Parse(responseBody);
+                        var data = new CreateResponseToMapDB();
+                        data.Id = responseJson["Invoice"]?["Id"]?.ToString();
+                        data.SyncToken = responseJson["Invoice"]?["SyncToken"]?.ToString();
+                        data.MetaData = responseJson["Invoice"]?["MetaData"]?.ToString();
+                        data.CustomField = responseJson["Invoice"]?["CustomField"]?.ToString();
+                        data.DocNumber = responseJson["Invoice"]?["DocNumber"]?.ToString();
+
+                        return new CreateOrUpdateInvoiceResponse()
+                        {
+                            Status = "success",
+                            Data = data,
+                            Error = null
+                        };
+                    }
+                    else
+                    {
+                        return new CreateOrUpdateInvoiceResponse() { Status = "failure", Error = responseBody, Data = null };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return new CreateOrUpdateInvoiceResponse() { Status = "failure", Error = ex.Message, Data = null };
+            }
+        }
+
+        public async Task<bool> GetCDCResp(string changedSinceString)
+        {
+            try
+            {
+                var accessToken = await GetAccessToken();
+                var oauthValidator = new OAuth2RequestValidator(accessToken);
+                var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
+                var dataService = new DataService(serviceContext);
+
+                DateTime changedSince;
+
+                if (DateTime.TryParse(changedSinceString, out changedSince))
+                {
+                    var resp = dataService.CDC(new List<IEntity> { new Invoice() }, changedSince);
+                    if (resp.entities.Count == 0)
+                    {
+                        return false;
+                    }
+                    else if (resp.entities.Values.First().Count == 0)
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                return true;
+            }
+        }
+
+        #region Get QB Access Token 
+
+        public async Task<string> LoginWithQB(
+            string clientId = "ABqYysGtrm0XgVixXnsbidHy8KSVoSFzYACjH0QbafaVHEWN3t",
+            string clientKey = "93kB6UwOvxTt3Vfs4v0NPfXSIeF6Pu15EEZ8YsEz",
+            string userId = "4620816365298358310")
+        {
+            var requestUri = $"https://dev.advintek.com.my:743/api/2024.1/QB/LoginWithQB?ClientID={clientId}&ClientKey={clientKey}&UserID={userId}";
+
+            var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+            request.Headers.Add("accept", "*/*");
+
+            try
+            {
+                var _httpClient = new HttpClient();
+                var response = await _httpClient.SendAsync(request);
+                response.EnsureSuccessStatusCode();
+
+                var content = await response.Content.ReadAsStringAsync();
+                if (response.IsSuccessStatusCode)
+                {
+                    var jsonDocument = JsonDocument.Parse(content);
+                    var root = jsonDocument.RootElement;
+                    var token = root.GetProperty("data").GetProperty("token").GetString();
+                    return token;
+                }
+                return content;
+            }
+            catch (HttpRequestException ex)
+            {
+                return $"Error calling LoginWithQB API: {ex.Message}";
+            }
+        }
+
+        #endregion
+
+        #region LHDN API's calling
+
+        public async Task<string> LoginAsync(string loginId, string password, string domain)
+        {
+            var _httpClient = new HttpClient();
+            var request = new HttpRequestMessage(HttpMethod.Post, "https://dev.advintek.com.my:743/api/2024.1/eInvoice/Login");
+            request.Headers.Add("accept", "*/*");
+
+            var content = new StringContent($"{{\n  \"loginId\": \"{loginId}\",\n  \"password\": \"{password}\",\n  \"domain\": \"{domain}\"\n}}", null, "application/json");
+            request.Content = content;
+
+            var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            if (response.IsSuccessStatusCode)
+            {
+                var resp = await response.Content.ReadAsStringAsync();
+                var apiResponse = JsonConvert.DeserializeObject<SubmitDocumentResponse>(resp);
+                var dataObject = JsonConvert.DeserializeObject<LoginData>(apiResponse.Data.ToString());
+                var token = dataObject.Token;
+                return token.ToString();
+            }
+            return string.Empty;
+        }
+
+        public async Task<int> CheckAlreadyExists(string invoiceId, string token)
+        {
+            try
+            {
+                var _httpClient = new HttpClient();
+                var request = new HttpRequestMessage(HttpMethod.Get, $"https://dev.advintek.com.my:743/api/2024.1/QB/GetInvoiceByInvoiceNumber?invoiceNumber={invoiceId}");
+                request.Headers.Add("accept", "*/*");
+                request.Headers.Add("Authorization", $"Bearer {token}");
+
+                var response = await _httpClient.SendAsync(request);
+
+                var jsonString = await response.Content.ReadAsStringAsync();
+                JObject jsonObj = JObject.Parse(jsonString);
+                if (jsonObj != null && jsonObj["Data"]!= null)
+                {
+                    var data = jsonObj["Data"].ToString();
+                    return 1;
+                }
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                return 3;
+            }
+        }
+
+        public async Task<DBInvoice> GetDBInvoice(string invoiceId, string token)
+        {
+            try
+            {
+                var _httpClient = new HttpClient();
+                var request = new HttpRequestMessage(HttpMethod.Get,$"https://dev.advintek.com.my:743/api/LightWeight/GetInvoiceByInvoiceNumber?invoiceNumber={invoiceId}");
+                request.Headers.Add("accept", "*/*");
+                request.Headers.Add("Authorization", $"Bearer {token}");
+
+                var response = await _httpClient.SendAsync(request);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var jsonString = await response.Content.ReadAsStringAsync();
+
+                    DBInvoice invoiceData = System.Text.Json.JsonSerializer.Deserialize<DBInvoice>(jsonString, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true // Optional: handles case sensitivity if necessary
+                    });
+                    return invoiceData;
+                }
+                var check = new SubmitDocumentResponse();
+                return new DBInvoice();
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public async Task<string> GetLastSentDate(string invoiceId)
+        {
+            try
+            {
+                return "0";
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+
+        public async Task<string> SubmitInvoiceAsync(InvoiceRequest invoiceRequest, string token)
+        {
+            try
+            {
+                using (var client = new HttpClient())
+                {
+                    var requestUrl = "https://dev.advintek.com.my:743/api/2024.1/eInvoice/eInvoiceCreateRequest";
+                    var request = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+                    {
+                        Content = new StringContent(
+                            JsonConvert.SerializeObject(invoiceRequest),
+                            Encoding.UTF8,
+                            "application/json")
+                    };
+
+                    request.Headers.Add("accept", "*/*");
+                    request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                    var response = await client.SendAsync(request);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var resp = await response.Content.ReadAsStringAsync();
+                        var apiResponse = JsonConvert.DeserializeObject<SubmitDocumentResponse>(resp);
+
+                        if (apiResponse?.Data != null)
+                        {
+                            if (apiResponse.Data.ToString().Contains("Validation Error"))
+                            {
+                                return "validation error";
+                            }
+                            var dataObject = JsonConvert.DeserializeObject<Data>(apiResponse.Data.ToString());
+
+                            if (dataObject?.AcceptedDocuments?.Count > 0)
+                                return dataObject.AcceptedDocuments.FirstOrDefault()?.Uuid;
+
+                            return resp; // Return raw JSON if accepted documents are empty
+                        }
+                    }
+
+                    // Log or handle errors if status code is not successful
+                    var errorResponse = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"Error Response: {errorResponse}");
+                    return errorResponse;
+                }
+            }
+            catch (Exception ex)
+            {
+                return "exception";
+            }
+        }
+
+        public async Task<string> GetSubmitDocumentDetails(string uuid, string token)
+        {
+            try
+            {
+                var client = new HttpClient();
+
+                var requestUrl = $"https://dev.advintek.com.my:743/api/LightWeight/GetSubmitDocumentDetails?uuid={uuid}";
+
+                var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+                request.Headers.Add("accept", "*/*");
+                request.Headers.Add("Authorization", $"Bearer {token}");
+
+                var response = await client.SendAsync(request);
+
+                return await response.Content.ReadAsStringAsync();
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+
+        public async Task<string> ProcessInvoiceMethod(ProcessRequest input, string token)
+        {
+            try
+            {
+                var client = new HttpClient();
+
+                var requestUrl = "https://dev.advintek.com.my:743/api/LightWeight/SentPDFEmail";
+
+                var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
+                request.Headers.Add("accept", "*/*");
+                request.Headers.Add("Authorization", $"Bearer {token}");
+
+                var jsonContent = JsonConvert.SerializeObject(input);
+                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+                request.Content = content;
+
+                var response = await client.SendAsync(request);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadAsStringAsync();
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+
+        public async Task<string> GetAccessToken()
+        {
+            var oauth2Client = new OAuth2Client(clientId, clientKey, "https://developer.intuit.com/v2/OAuth2Playground/RedirectUrl", "production");
+
+            var previousRefreshToken = refreshToken;
+            var tokenResp = await oauth2Client.RefreshTokenAsync(previousRefreshToken);
+            var data = tokenResp;
+
+            if (!String.IsNullOrEmpty(data.Error) || String.IsNullOrEmpty(data.RefreshToken) || String.IsNullOrEmpty(data.AccessToken))
+            {
+                throw new Exception("Refresh token failed - " + data.Error);
+            }
+
+            // If we've got a new refresh_token store it in the file
+            if (previousRefreshToken != data.RefreshToken)
+            {
+                Console.WriteLine("Writing new refresh token : " + data.RefreshToken);
+                WriteNewRefreshTokenToWhereItIsStored(data.RefreshToken);
+            }
+            return data.AccessToken;
+        }
+
+        private string WriteNewRefreshTokenToWhereItIsStored(string newRefreshToken)
+        {
+            string _filePath = Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json");
+            var section = "QuickBooksSettings";
+            var key = "RefreshToken";
+            var newValue = newRefreshToken;
+
+            var json = File.ReadAllText(_filePath);
+            dynamic jsonObj = JsonConvert.DeserializeObject(json);
+            jsonObj[section][key] = newValue;
+            string output = JsonConvert.SerializeObject(jsonObj, Formatting.Indented);
+            File.WriteAllText(_filePath, output);
+
+            return "success";
+        }
+        #endregion
+    }
+}
