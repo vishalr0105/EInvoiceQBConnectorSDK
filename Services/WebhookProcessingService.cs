@@ -1,22 +1,18 @@
-﻿
-using EInvoiceQuickBooks.Models;
+﻿using EInvoiceQuickBooks.Models;
 using EInvoiceQuickBooks.Models1;
-//using ImageMagick;
 using Intuit.Ipp.Data;
 using Intuit.Ipp.WebhooksService;
-using Microsoft.VisualBasic;
-//using MimeKit;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Text.Json.Nodes;
 using System.Text.Json;
-//using Syncfusion.Pdf.Graphics;
 using Serilog;
 using System.Net.WebSockets;
 using Intuit.Ipp.OAuth2PlatformClient;
 using System.Text.RegularExpressions;
 using System.Linq;
 using Microsoft.Extensions.Options;
+using System.Configuration;
 
 namespace EInvoiceQuickBooks.Services
 {
@@ -24,11 +20,21 @@ namespace EInvoiceQuickBooks.Services
     {
         private readonly IQueueService _queueService;
         private readonly IServiceProvider _serviceProvider;
+        private readonly IConfiguration _configuration;
+        private readonly string dummyEmail = "";
+        private readonly string clientId = "";
+        private readonly string clientKey = "";
+        private readonly string realmeId = "";
 
-        public WebhookProcessingService(IQueueService queueService, IServiceProvider serviceProvider)
+        public WebhookProcessingService(IQueueService queueService, IServiceProvider serviceProvider, IConfiguration configuration)
         {
             _queueService = queueService;
             _serviceProvider = serviceProvider;
+            _configuration = configuration;
+            dummyEmail = _configuration["DummyEmail"];
+            clientId = _configuration["QuickBooksSettings:ClientId"];
+            clientKey = _configuration["QuickBooksSettings:ClientSecret"];
+            realmeId = _configuration["QuickBooksSettings:RealmId"];
         }
 
         protected override async System.Threading.Tasks.Task ExecuteAsync(CancellationToken stoppingToken)
@@ -67,13 +73,14 @@ namespace EInvoiceQuickBooks.Services
                 var webhookEvents = obj.GetWebooksEvents(payload);
 
                 var invoiceId = webhookEvents.EventNotifications.First().DataChangeEvent.Entities.FirstOrDefault()?.Id;
-                var operation = webhookEvents.EventNotifications.First().DataChangeEvent.Entities.FirstOrDefault().Operation;
+                var operation = webhookEvents.EventNotifications.First().DataChangeEvent.Entities.FirstOrDefault()?.Operation;
                 var syncToken = "";
 
                 Console.WriteLine($"Processing {operation} operation on invoice with id: {invoiceId}");
                 LogInfo($"Processing {operation} operation on invoice with id: {invoiceId}");
 
-                string token = await invoiceService.LoginAsync("SuperAdmin", "admin", "Advintek");
+                //string token = await invoiceService.LoginAsync("SuperAdmin", "admin", "Advintek");
+                string token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmeId);
 
                 if (operation == "Emailed")
                 {
@@ -96,6 +103,7 @@ namespace EInvoiceQuickBooks.Services
                                     Id = originalInvoice.Id,
                                     SyncToken = originalInvoice.SyncToken,
                                     sparse = true,
+                                    BillEmail = new EmailAddress { Address = dummyEmail},
                                     CustomField = new List<Intuit.Ipp.Data.CustomField>
                                     {
                                         new Intuit.Ipp.Data.CustomField
@@ -141,23 +149,49 @@ namespace EInvoiceQuickBooks.Services
                             if (updateInvoiceInput != null)
                             {
                                 var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput);
+                                if (updateRes is Invoice && updateRes != null)
+                                {
+                                    if (res == "success")
+                                    {
+                                        LogInfo($"Invoice Resent successfully - {invoiceId}");
+                                        Console.WriteLine($"Invoice Resent successfully - {invoiceId}");
+                                    }
+                                    else if (res == "failure")
+                                    {
+                                        LogInfo($"Invoice Resent failure - {invoiceId}");
+                                        Console.WriteLine($"Invoice Resent failure - {invoiceId}");
+                                    }
+                                    else
+                                    {
+                                        LogInfo($"{res} - Invoice - {invoiceId}");
+                                        Console.WriteLine($"{res} - Invoice - {invoiceId}");
+                                    }
+                                }
                             }
                         }
                         else if (check == 1)
                         {
                             //If already sent
 
-                            var lastSentDate = originalInvoice.CustomField.Where(c => c.DefinitionId == "2").Select(c => c.AnyIntuitObject.ToString()).FirstOrDefault();
+                            var lastSyncToken = originalInvoice.CustomField.Where(c => c.DefinitionId == "2").Select(c => c.AnyIntuitObject?.ToString()).FirstOrDefault();
                             var originalInvoiceSyncToken = originalInvoice.SyncToken.ToString();
-                            var cdcResp = await invoiceService.GetCDCResp(lastSentDate);  //if there are updated entities then true
-
-                            if (cdcResp == false && originalInvoiceSyncToken == lastSentDate)
+                            string createdDate = "";
+                            if (String.IsNullOrEmpty(lastSyncToken))
+                            {
+                                lastSyncToken = originalInvoiceSyncToken;
+                            }
+                            else
+                            {
+                                createdDate = originalInvoice.MetaData.CreateTime.ToString("yyyy-MM-ddTHH:mm:ss");
+                            }
+                            var cdcResp = await invoiceService.GetCDCResp(createdDate);  //if there are updated entities then true
+                            if (originalInvoiceSyncToken == lastSyncToken)
                             {
                                 var res = await ProcessMethod(originalInvoice, invoiceId);
 
                                 Invoice updateInvoiceInput = new Invoice();
 
-                                if (res.ToLower() == "success")
+                                if (res.ToLower() == "success" || res.Contains("A LongId was not found for this UUID"))
                                 {
                                     updateInvoiceInput = new Invoice()
                                     {
@@ -209,6 +243,19 @@ namespace EInvoiceQuickBooks.Services
                                 if (updateInvoiceInput != null)
                                 {
                                     var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput);
+                                    if (updateRes is Invoice && updateRes != null)
+                                    {
+                                        if (res == "success")
+                                        {
+                                            LogInfo($"Invoice Resent successfully - {invoiceId}");
+                                            Console.WriteLine($"Invoice Resent successfully - {invoiceId}");
+                                        }
+                                        else if (res == "failure")
+                                        {
+                                            LogInfo($"Invoice Resent failure - {invoiceId}");
+                                            Console.WriteLine($"Invoice Resent failure - {invoiceId}");
+                                        }
+                                    }
                                 }
                             }
                             else
@@ -302,7 +349,8 @@ namespace EInvoiceQuickBooks.Services
 
                     if (checkExists == 1)
                     {
-                        token = await invoiceService.LoginAsync("SuperAdmin", "admin", "Advintek");
+                        //token = await invoiceService.LoginAsync("SuperAdmin", "admin", "Advintek");
+                        token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmeId);
                         var dbInvoice = await invoiceService.GetDBInvoice(invoiceId, token);
 
                         try
@@ -350,7 +398,7 @@ namespace EInvoiceQuickBooks.Services
                             {
                                 DefaultSpecified = true,
                                 Default = true,
-                                Address = "dummy@advintek.co"
+                                Address = dummyEmail
                             },
                             CustomField = new List<Intuit.Ipp.Data.CustomField>
                                     {
@@ -366,7 +414,7 @@ namespace EInvoiceQuickBooks.Services
                                             DefinitionId = "1",
                                             Name = "Original Email",
                                             Type = CustomFieldTypeEnum.StringType,
-                                            AnyIntuitObject = originalInvoice.BillEmail.Address,
+                                            AnyIntuitObject = originalInvoice.BillEmail?.Address ?? dummyEmail,
                                         }
                                     }.ToArray(),
                             CustomerRef = originalInvoice.CustomerRef,
@@ -387,7 +435,7 @@ namespace EInvoiceQuickBooks.Services
                     if (emailCheck != null)
                     {
                         var email = emailCheck.Address.ToString();
-                        if (!String.IsNullOrEmpty(email) && email == "dummy@advintek.co")
+                        if (!String.IsNullOrEmpty(email) && email == dummyEmail)
                         {
                             flag = true;
                         }
@@ -400,7 +448,7 @@ namespace EInvoiceQuickBooks.Services
                                 sparse = true,
                                 BillEmail = new EmailAddress()
                                 {
-                                    Address = "dummy@advintek.co"
+                                    Address = dummyEmail
                                 },
                                 CustomField = new List<Intuit.Ipp.Data.CustomField>
                                 {
@@ -444,16 +492,17 @@ namespace EInvoiceQuickBooks.Services
                     var requestProgress = new ProcessRequest()
                     {
                         base64Pdf = base64PdfString.ToString(),
-                        emailAddress = originalEmail == null ? "dummy@advintek.co" : originalEmail,
+                        emailAddress = originalEmail == null ? dummyEmail : originalEmail,
                     };
 
-                    var tokenResp = await invoiceService.LoginAsync("SuperAdmin", "admin", "Advintek");
+                    //var tokenResp = await invoiceService.LoginAsync("SuperAdmin", "admin", "Advintek");
+                    var tokenResp = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmeId);
 
                     var req = GetBaseInvoiceRequest(originalInvoice);
                     var json = JsonConvert.SerializeObject(req, Formatting.Indented);//Invoıce
                     string submitResp;
                     var count = 0;
-
+                    string resProcessInvoice = "";
                     do
                     {
                         submitResp = await invoiceService.SubmitInvoiceAsync(req, tokenResp);
@@ -466,7 +515,8 @@ namespace EInvoiceQuickBooks.Services
 
                     if (submitResp.Contains("e-Invoice Code or Number is already in use"))
                     {
-                        return "already in use";
+                        resProcessInvoice = await invoiceService.ProcessInvoiceMethod(requestProgress, tokenResp);
+                        return "success";
                     }
                     else if (submitResp.ToLower().Contains("validation error"))
                     {
@@ -478,8 +528,7 @@ namespace EInvoiceQuickBooks.Services
                     }
 
                     var getSubmitDocDetailsResp = await invoiceService.GetSubmitDocumentDetails(submitResp, tokenResp);
-
-                    var resProcessInvoice = await invoiceService.ProcessInvoiceMethod(requestProgress, tokenResp);
+                    resProcessInvoice = await invoiceService.ProcessInvoiceMethod(requestProgress, tokenResp);
 
                     if (resProcessInvoice.Contains("Email sent successfully"))
                     {
@@ -539,7 +588,7 @@ namespace EInvoiceQuickBooks.Services
                 BuyerBusinessRegistrationNumber = "200601028904",
                 BuyerIdentificationNumberOrPassportNumber = null,
                 BuyerSSTRegistrationNumber = "B10-1808-22000011",
-                BuyerEmail = String.IsNullOrEmpty(invoice.BillEmail.Address) ? "dummy@advintek.co" : invoice.BillEmail.Address,
+                BuyerEmail = String.IsNullOrEmpty(invoice.BillEmail.Address) ? dummyEmail : invoice.BillEmail.Address,
                 BuyerContactNumber = "16097995959",
                 BuyerAddressLine0 = "Unit #35-01B , Q Sentral No.2A,",
                 BuyerAddressLine1 = "Jalan Stesen Sentral 2,",

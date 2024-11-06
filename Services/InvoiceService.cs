@@ -31,7 +31,6 @@ namespace EInvoiceQuickBooks.Services
         private readonly string realmId;
         private readonly string clientId;
         private readonly string clientKey;
-        //private readonly string accessToken;
         private readonly string refreshToken;
 
         public InvoiceService(IHttpClientFactory httpClientFactory, IOptions<QuickBooksSettings> quickBooksSettings)
@@ -41,7 +40,6 @@ namespace EInvoiceQuickBooks.Services
             realmId = _qBooksConfig.RealmId;
             clientId = _qBooksConfig.ClientId;
             clientKey = _qBooksConfig.ClientSecret;
-            //accessToken = _qBooksConfig.AccessToken;
             refreshToken = _qBooksConfig.RefreshToken;
         }
 
@@ -81,7 +79,7 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
-                throw ex;
+                return ex;
             }
         }
 
@@ -233,11 +231,46 @@ namespace EInvoiceQuickBooks.Services
             {
                 var resp = await response.Content.ReadAsStringAsync();
                 var apiResponse = JsonConvert.DeserializeObject<SubmitDocumentResponse>(resp);
-                var dataObject = JsonConvert.DeserializeObject<LoginData>(apiResponse.Data.ToString());
-                var token = dataObject.Token;
-                return token.ToString();
+                var dataObject = JsonConvert.DeserializeObject<LoginData>(apiResponse?.Data?.ToString());
+                var token = dataObject?.Token;
+                return token;
             }
             return string.Empty;
+        }
+
+        public async Task<string> GetQuickBooksLoginDataAsync(string clientID, string clientKey, string userID)
+        {
+            try
+            {
+                var _httpClient = new HttpClient();
+                var url = $"https://dev.advintek.com.my:743/api/2024.1/QB/LoginWithQB?ClientID={clientID}&ClientKey={clientKey}&UserID={userID}";
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Add("accept", "*/*");
+
+                var response = await _httpClient.SendAsync(request);
+
+                response.EnsureSuccessStatusCode();
+
+                var content = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var jsonDocument = JsonDocument.Parse(content);
+                    var root = jsonDocument.RootElement;
+                    var token = root.GetProperty("data").GetProperty("token").GetString();
+                    return token;
+                }
+                return content;
+                Console.WriteLine(content);
+
+                return string.Empty;
+            }
+            catch (Exception ex)
+            {
+                // Handle any other exceptions
+                Console.WriteLine($"An error occurred: {ex.Message}");
+                return string.Empty;
+            }
         }
 
         public async Task<int> CheckAlreadyExists(string invoiceId, string token)
@@ -253,10 +286,14 @@ namespace EInvoiceQuickBooks.Services
 
                 var jsonString = await response.Content.ReadAsStringAsync();
                 JObject jsonObj = JObject.Parse(jsonString);
-                if (jsonObj != null && jsonObj["Data"]!= null)
+                if (jsonObj != null && jsonObj["data"] != null && jsonObj["data"].Type == JTokenType.Object)
                 {
-                    var data = jsonObj["Data"].ToString();
-                    return 1;
+                    var dataObj = jsonObj["data"] as JObject;
+
+                    if (dataObj["invoice"] != null && !string.IsNullOrEmpty(dataObj["invoice"].ToString()))
+                    {
+                        return 1;
+                    }
                 }
                 return 0;
             }
@@ -290,20 +327,9 @@ namespace EInvoiceQuickBooks.Services
                 var check = new SubmitDocumentResponse();
                 return new DBInvoice();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                throw ex;
-            }
-        }
-        public async Task<string> GetLastSentDate(string invoiceId)
-        {
-            try
-            {
-                return "0";
-            }
-            catch (Exception ex)
-            {
-                throw ex;
+                return new DBInvoice();
             }
         }
 
@@ -353,7 +379,7 @@ namespace EInvoiceQuickBooks.Services
                     return errorResponse;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return "exception";
             }

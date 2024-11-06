@@ -35,7 +35,6 @@ namespace EInvoiceQuickBooks.Controllers
 
                 if (string.IsNullOrEmpty(intuitSignature))
                 {
-                    LogInfo($"Missing Intuit signature.");
                     return BadRequest("Missing Intuit signature.");
                 }
 
@@ -44,10 +43,8 @@ namespace EInvoiceQuickBooks.Controllers
 
                 if (test == false)
                 {
-                    LogInfo($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - Invalid signature");
                     return Unauthorized("Invalid signature.");
                 }
-                LogInfo($"Webhook received and verified.");
 
                 using JsonDocument doc = JsonDocument.Parse(payloadString);
                 string operation = doc.RootElement
@@ -66,21 +63,6 @@ namespace EInvoiceQuickBooks.Controllers
             catch (Exception ex)
             {
                 return BadRequest(ex.Message);
-            }
-        }
-
-        private void LogInfo(string message)
-        {
-            try
-            {
-                using (StreamWriter writer = new StreamWriter(logFilePath, true))
-                {
-                    writer.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - INFO - {message}");
-                }
-            }
-            catch (Exception)
-            {
-                return;
             }
         }
     }
