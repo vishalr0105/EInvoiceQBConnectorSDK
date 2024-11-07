@@ -71,7 +71,7 @@ namespace EInvoiceQuickBooks.Models
         public decimal? Balance { get; set; }
 
         [JsonProperty("MetaData")]
-        public object? MetaData { get; set; }  // Define the type based on your requirements
+        public object? MetaData { get; set; }
 
         [JsonProperty("CustomField")]
         public List<CustomField>? CustomField { get; set; }
@@ -159,10 +159,6 @@ namespace EInvoiceQuickBooks.Models
         [JsonProperty("value")]
         public string? Value { get; set; }
     }
-    //{
-    //    public string? name { get; set; }
-    //    public string? value { get; set; }
-    //}
 
     public class CustomerMemo
     {
@@ -175,13 +171,6 @@ namespace EInvoiceQuickBooks.Models
         public string? value { get; set; }
     }
 
-    //public class CustomerRef
-    //{
-    //    [JsonProperty("@name")]
-    //    public string? name { get; set; }
-    //    [JsonProperty("#text")]
-    //    public string? value { get; set; }
-    //}
     public class CustomerRef
     {
         [JsonProperty("name")]
@@ -277,16 +266,6 @@ namespace EInvoiceQuickBooks.Models
     {
         public string Value { get; set; }
     }
-    //public class TaxCodeRef
-    //{
-    //    public string? Value { get; set; }
-
-    //    [JsonProperty("@name")]
-    //    public string? Name { get; set; }
-
-    //    [JsonProperty("#text")]
-    //    public string? Text { get; set; }
-    //}
 
     public class TxnTaxDetail
     {

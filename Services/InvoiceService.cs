@@ -21,6 +21,7 @@ using System;
 using Intuit.Ipp.Exception;
 using System.Net.Http;
 using System.Xml.Serialization;
+using System.ComponentModel.Design;
 
 namespace EInvoiceQuickBooks.Services
 {
@@ -147,72 +148,41 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
-        public async Task<bool> GetCDCResp(string changedSinceString)
+        //Explicitly Send the Invoice Email
+        public async Task<string> SendInvoiceEmailAsync(string invoiceId)
         {
             try
             {
                 var accessToken = await GetAccessToken();
-                var oauthValidator = new OAuth2RequestValidator(accessToken);
-                var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
-                var dataService = new DataService(serviceContext);
+                HttpClient client = new HttpClient();
 
-                DateTime changedSince;
+                var url = $"https://sandbox-quickbooks.api.intuit.com/v3/company/{realmId}/invoice/{invoiceId}/send";
+                var request = new HttpRequestMessage(HttpMethod.Post, url);
+                request.Headers.Add("Authorization", $"Bearer {accessToken}");
+                request.Headers.Add("Content-Type", "application/octet-stream");
 
-                if (DateTime.TryParse(changedSinceString, out changedSince))
+                var content = new StringContent(string.Empty);
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                request.Content = content;
+
+                // Send the request and get the response
+                var response = await client.SendAsync(request);
+                string responseBody = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
                 {
-                    var resp = dataService.CDC(new List<IEntity> { new Invoice() }, changedSince);
-                    if (resp.entities.Count == 0)
-                    {
-                        return false;
-                    }
-                    else if (resp.entities.Values.First().Count == 0)
-                    {
-                        return false;
-                    }
+                    Console.WriteLine("Invoice sent successfully:");
+                    return "success";
                 }
-                return true;
+
+                return "failure";
             }
             catch (Exception ex)
             {
-                return true;
+                Console.WriteLine($"General error: {ex.Message}");
+                return "failure";
             }
         }
-
-        #region Get QB Access Token 
-
-        public async Task<string> LoginWithQB(
-            string clientId = "ABqYysGtrm0XgVixXnsbidHy8KSVoSFzYACjH0QbafaVHEWN3t",
-            string clientKey = "93kB6UwOvxTt3Vfs4v0NPfXSIeF6Pu15EEZ8YsEz",
-            string userId = "4620816365298358310")
-        {
-            var requestUri = $"https://dev.advintek.com.my:743/api/2024.1/QB/LoginWithQB?ClientID={clientId}&ClientKey={clientKey}&UserID={userId}";
-
-            var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
-            request.Headers.Add("accept", "*/*");
-
-            try
-            {
-                var _httpClient = new HttpClient();
-                var response = await _httpClient.SendAsync(request);
-                response.EnsureSuccessStatusCode();
-
-                var content = await response.Content.ReadAsStringAsync();
-                if (response.IsSuccessStatusCode)
-                {
-                    var jsonDocument = JsonDocument.Parse(content);
-                    var root = jsonDocument.RootElement;
-                    var token = root.GetProperty("data").GetProperty("token").GetString();
-                    return token;
-                }
-                return content;
-            }
-            catch (HttpRequestException ex)
-            {
-                return $"Error calling LoginWithQB API: {ex.Message}";
-            }
-        }
-
-        #endregion
 
         #region LHDN API's calling
 
@@ -261,9 +231,6 @@ namespace EInvoiceQuickBooks.Services
                     return token;
                 }
                 return content;
-                Console.WriteLine(content);
-
-                return string.Empty;
             }
             catch (Exception ex)
             {
@@ -303,12 +270,12 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
-        public async Task<DBInvoice> GetDBInvoice(string invoiceId, string token)
+        public async Task<string> GetDBInvoice(string invoiceId, string token)
         {
             try
             {
                 var _httpClient = new HttpClient();
-                var request = new HttpRequestMessage(HttpMethod.Get,$"https://dev.advintek.com.my:743/api/LightWeight/GetInvoiceByInvoiceNumber?invoiceNumber={invoiceId}");
+                var request = new HttpRequestMessage(HttpMethod.Get, $"https://dev.advintek.com.my:743/api/2024.1/QB/GetInvoiceByInvoiceNumber?invoiceNumber={invoiceId}");
                 request.Headers.Add("accept", "*/*");
                 request.Headers.Add("Authorization", $"Bearer {token}");
 
@@ -317,19 +284,26 @@ namespace EInvoiceQuickBooks.Services
                 if (response.IsSuccessStatusCode)
                 {
                     var jsonString = await response.Content.ReadAsStringAsync();
+                    var document = JsonDocument.Parse(jsonString);
 
-                    DBInvoice invoiceData = System.Text.Json.JsonSerializer.Deserialize<DBInvoice>(jsonString, new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true // Optional: handles case sensitivity if necessary
-                    });
-                    return invoiceData;
+                    // Get the "data"-"invoice"-"quickBookDetails" field
+                    var dataElement = document.RootElement.GetProperty("data");
+                    var invoiceElement = dataElement.GetProperty("invoice");
+                    var quickBookDetailsElement = invoiceElement.GetProperty("quickBookDetails");
+                    var quickBookDetailsJsonString = quickBookDetailsElement.GetRawText();
+
+                    var parsedObject = JsonConvert.DeserializeObject(quickBookDetailsJsonString);
+                    string formattedJson = JsonConvert.SerializeObject(parsedObject, Formatting.Indented);
+
+                    return formattedJson;
                 }
-                var check = new SubmitDocumentResponse();
-                return new DBInvoice();
+                var errorContent = await response.Content.ReadAsStringAsync();
+
+                return string.Empty;
             }
             catch (Exception)
             {
-                return new DBInvoice();
+                return string.Empty;
             }
         }
 
@@ -413,7 +387,7 @@ namespace EInvoiceQuickBooks.Services
             {
                 var client = new HttpClient();
 
-                var requestUrl = "https://dev.advintek.com.my:743/api/LightWeight/SentPDFEmail";
+                var requestUrl = "https://dev.advintek.com.my:743/api/2024.1/QB/SentPDFEmail";
 
                 var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
                 request.Headers.Add("accept", "*/*");
@@ -424,7 +398,7 @@ namespace EInvoiceQuickBooks.Services
                 request.Content = content;
 
                 var response = await client.SendAsync(request);
-                response.EnsureSuccessStatusCode();
+                //response.EnsureSuccessStatusCode();
                 return await response.Content.ReadAsStringAsync();
             }
             catch (Exception ex)
