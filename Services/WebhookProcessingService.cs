@@ -84,6 +84,7 @@ namespace EInvoiceQuickBooks.Services
 
                 if (operation == "Emailed")
                 {
+                    token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmeId);
                     var check = await invoiceService.CheckAlreadyExists(invoiceId, token);
                     var originalInvoice = await invoiceService.GetInvoiceAsync(invoiceId);
 
@@ -259,7 +260,7 @@ namespace EInvoiceQuickBooks.Services
                             else
                             {
                                 //if resend and updated code goes here
-                                var dbInvoice = await invoiceService.GetDBInvoice(invoiceId, token);
+                                var dbInvoice = await invoiceService.GetDBInvoice(invoiceId, token, Convert.ToInt32(syncToken), dummyEmail);
 
                                 var createRes = await invoiceService.CreateOrUpdateInvoice(dbInvoice);
 
@@ -342,7 +343,7 @@ namespace EInvoiceQuickBooks.Services
                         try
                         {
                             token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmeId);
-                            var dbInvoice = await invoiceService.GetDBInvoice(invoiceId, token);
+                            var dbInvoice = await invoiceService.GetDBInvoice(invoiceId, token, -1, dummyEmail);
 
                             var createRes = await invoiceService.CreateOrUpdateInvoice(dbInvoice);
                             if (createRes.Status.ToLower() == "success")
@@ -617,7 +618,7 @@ namespace EInvoiceQuickBooks.Services
                 SourceFileName = "Advintek_Aif12",
                 TaxOfficeSchedulerTemplateName = "Invoice Template",
                 TemplateName = "PDF_Telis_inv",
-                quickBookDetails = GetQuickBookDetails(invoice),
+                QuickBookDetails = GetQuickBookDetails(invoice),
                 DocTaxTotal = new DocTaxTotal
                 {
                     TaxCategoryTaxAmountInAccountingCurrency = "0.00",
@@ -675,7 +676,7 @@ namespace EInvoiceQuickBooks.Services
             return res;
         }
 
-        private string GetQuickBookDetails(Invoice invoice)
+        private object GetQuickBookDetails(Invoice invoice)
         {
             var result = new
             {

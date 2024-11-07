@@ -22,6 +22,7 @@ using Intuit.Ipp.Exception;
 using System.Net.Http;
 using System.Xml.Serialization;
 using System.ComponentModel.Design;
+using System.Text.RegularExpressions;
 
 namespace EInvoiceQuickBooks.Services
 {
@@ -159,7 +160,7 @@ namespace EInvoiceQuickBooks.Services
                 var url = $"https://sandbox-quickbooks.api.intuit.com/v3/company/{realmId}/invoice/{invoiceId}/send";
                 var request = new HttpRequestMessage(HttpMethod.Post, url);
                 request.Headers.Add("Authorization", $"Bearer {accessToken}");
-                request.Headers.Add("Content-Type", "application/octet-stream");
+                //request.Headers.Add("Content-Type", "application/json");
 
                 var content = new StringContent(string.Empty);
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
@@ -270,7 +271,7 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
-        public async Task<string> GetDBInvoice(string invoiceId, string token)
+        public async Task<string> GetDBInvoice(string invoiceId, string token, int isCreateNew, string emailValue)
         {
             try
             {
@@ -285,17 +286,136 @@ namespace EInvoiceQuickBooks.Services
                 {
                     var jsonString = await response.Content.ReadAsStringAsync();
                     var document = JsonDocument.Parse(jsonString);
-
+                        
                     // Get the "data"-"invoice"-"quickBookDetails" field
                     var dataElement = document.RootElement.GetProperty("data");
                     var invoiceElement = dataElement.GetProperty("invoice");
                     var quickBookDetailsElement = invoiceElement.GetProperty("quickBookDetails");
                     var quickBookDetailsJsonString = quickBookDetailsElement.GetRawText();
 
-                    var parsedObject = JsonConvert.DeserializeObject(quickBookDetailsJsonString);
-                    string formattedJson = JsonConvert.SerializeObject(parsedObject, Formatting.Indented);
+                    string formattedJson = Regex.Unescape(quickBookDetailsJsonString).Trim('"');
 
-                    return formattedJson;
+                    //var jsonObject = JsonConvert.DeserializeObject(formattedJson);
+                    var jsonObject = JsonConvert.DeserializeObject<JObject>(formattedJson);
+                    if (jsonObject["CurrencyRef"]?["Value"] != null)
+                    {
+                        // Change "Value" to "value" in CurrencyRef
+                        jsonObject["CurrencyRef"]["value"] = jsonObject["CurrencyRef"]["Value"];
+                        ((JObject)jsonObject["CurrencyRef"]).Property("Value")?.Remove();
+
+                        ((JObject)jsonObject["CurrencyRef"]).Property("type")?.Remove();
+                    }
+
+                    if (jsonObject["CustomerRef"]?["Value"] != null)
+                    {
+                        // Change "Value" to "value" in CustomerRef
+                        jsonObject["CustomerRef"]["value"] = jsonObject["CustomerRef"]["Value"];
+                        ((JObject)jsonObject["CustomerRef"]).Property("Value")?.Remove();
+
+                        ((JObject)jsonObject["CustomerRef"]).Property("type")?.Remove();
+                    }
+
+                    // List of detail types that might appear in Line items
+                    var detailTypes = new[] { "SalesItemLineDetail", "SubTotalLineDetail", "DiscountLineDetail" };
+
+                    // Properties to be removed from each detail type object
+                    var propertiesToRemove = new[] { "AnyIntuitObject", "SalesItemLineDetailEx", "TaxClassificationRef", "UOMRef", "DiscountLineDetailEx" };
+
+                    // Remove specified properties from each item in the Line array
+                    if (jsonObject["Line"] is JArray lineArray)
+                    {
+                        foreach (JObject lineItem in lineArray)
+                        {
+                            lineItem.Property("LinkedTxn")?.Remove();
+                            lineItem.Property("CustomField")?.Remove();
+                            lineItem.Property("LineEx")?.Remove();
+                            lineItem.Property("ProjectRef")?.Remove();
+
+                            if (lineItem is JObject line)
+                            {
+                                var propertiesToRemoveNulls = line.Properties()
+                                              .Where(p => p.Value.Type == JTokenType.Null)
+                                              .ToList();
+
+                                foreach (var prop in propertiesToRemoveNulls)
+                                {
+                                    prop.Remove();
+                                }
+
+                                if (line["DetailType"] is JValue detailTypeValue)
+                                {
+                                    string detailTypeKey = detailTypeValue.ToString();
+                                    string enumValue = GetDetailTypeEnum(detailTypeKey).ToString();
+                                    line["DetailType"] = enumValue; // Update DetailType with enum string
+                                }
+
+                                if (line["AnyIntuitObject"] is JObject anyIntuitObject)
+                                {
+                                    var detailTypeValue1 = line["DetailType"]?.ToString();
+                                    if (!string.IsNullOrEmpty(detailTypeValue1))
+                                    {
+                                        lineItem[detailTypeValue1] = anyIntuitObject;
+                                    }
+                                    line.Remove("AnyIntuitObject");
+                                }
+
+                                foreach (var detailType in detailTypes)
+                                {
+                                    if (line[detailType] is JObject detailObject)
+                                    {
+                                        // Remove specified properties from the current detail type object
+                                        foreach (var prop in propertiesToRemove)
+                                        {
+                                            detailObject.Property(prop)?.Remove();
+                                        }
+
+                                        var propertiesToRemoveNullsFromDetail = detailObject.Properties()
+                                                                     .Where(p => p.Value.Type == JTokenType.Null)
+                                                                     .ToList();
+
+                                        foreach (var prop in propertiesToRemoveNullsFromDetail)
+                                        {
+                                            prop.Remove();
+                                        }
+
+                                        var nestedPropertiesToModify = new[] { "ItemAccountRef", "TaxCodeRef", "ItemRef", "DiscountAccountRef" }; // Add more as needed
+
+                                        foreach (var nestedProperty in nestedPropertiesToModify)
+                                        {
+                                            if (detailObject[nestedProperty] is JObject nestedObject)
+                                            {
+                                                // Remove the "type" property and replace "Value" with "value"
+                                                nestedObject.Property("type")?.Remove();
+                                                if (nestedObject["Value"] != null)
+                                                {
+                                                    nestedObject["value"] = nestedObject["Value"];
+                                                    nestedObject.Property("Value")?.Remove();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                            }
+                        }
+                    }
+
+                    if (isCreateNew != -1)
+                    {
+                        jsonObject["Id"] = invoiceId;
+                        jsonObject["SyncToken"] = isCreateNew.ToString();
+                        jsonObject["sparse"] = true;
+                    }
+                    else
+                    {
+                        jsonObject["BillEmail"] = new JObject
+                        {
+                            ["Address"] = emailValue // Replace with dynamic value as needed
+                        };
+                    }
+                    string prettyJson = JsonConvert.SerializeObject(jsonObject, Formatting.Indented);
+
+                    return prettyJson;
                 }
                 var errorContent = await response.Content.ReadAsStringAsync();
 
@@ -305,6 +425,31 @@ namespace EInvoiceQuickBooks.Services
             {
                 return string.Empty;
             }
+        }
+
+        private LineDetailTypeEnum GetDetailTypeEnum(string detailType)
+        {
+            return detailType switch
+            {
+                "0" => LineDetailTypeEnum.PaymentLineDetail,
+                "1" => LineDetailTypeEnum.DiscountLineDetail,
+                "2" => LineDetailTypeEnum.TaxLineDetail,
+                "3" => LineDetailTypeEnum.SalesItemLineDetail,
+                "4" => LineDetailTypeEnum.ItemBasedExpenseLineDetail,
+                "5" => LineDetailTypeEnum.AccountBasedExpenseLineDetail,
+                "6" => LineDetailTypeEnum.DepositLineDetail,
+                "7" => LineDetailTypeEnum.PurchaseOrderItemLineDetail,
+                "8" => LineDetailTypeEnum.ItemReceiptLineDetail,
+                "9" => LineDetailTypeEnum.JournalEntryLineDetail,
+                "10" => LineDetailTypeEnum.GroupLineDetail,
+                "11" => LineDetailTypeEnum.DescriptionOnly,
+                "12" => LineDetailTypeEnum.SubTotalLineDetail,
+                "13" => LineDetailTypeEnum.SalesOrderItemLineDetail,
+                "14" => LineDetailTypeEnum.TDSLineDetail,
+                "15" => LineDetailTypeEnum.ReimburseLineDetail,
+                "16" => LineDetailTypeEnum.ItemAdjustmentLineDetail,
+                _ => throw new ArgumentOutOfRangeException($"Unknown DetailType: {detailType}"),
+            };
         }
 
         public async Task<string> SubmitInvoiceAsync(InvoiceRequest invoiceRequest, string token)

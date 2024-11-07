@@ -230,8 +230,8 @@ namespace EInvoiceQuickBooks.Models1
         [JsonProperty("Template Name")]
         public string? TemplateName { get; set; }
 
-        [JsonProperty("quickBookDetails")]
-        public string? quickBookDetails { get; set; }
+        [JsonProperty("Quick Book Details")]
+        public object? QuickBookDetails { get; set; }
 
         [JsonProperty("DocTaxTotal")]
         public DocTaxTotal? DocTaxTotal { get; set; }
