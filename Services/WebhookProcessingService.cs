@@ -682,7 +682,9 @@ namespace EInvoiceQuickBooks.Services
             {
                 CurrencyRef = invoice.CurrencyRef,
                 Line = invoice.Line,
-                CustomerRef = invoice.CustomerRef
+                CustomerRef = invoice.CustomerRef,
+                CustomField = invoice.CustomField,
+                BillEmail = invoice.BillEmail
             };
 
             // Convert the result to a minified JSON string

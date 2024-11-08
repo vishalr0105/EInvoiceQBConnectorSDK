@@ -30,19 +30,23 @@ namespace EInvoiceQuickBooks.Services
     {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly QuickBooksSettings _qBooksConfig;
+        private readonly IConfiguration _configuration;
         private readonly string realmId;
         private readonly string clientId;
         private readonly string clientKey;
         private readonly string refreshToken;
+        private readonly string lhdnBaseUrl;
 
-        public InvoiceService(IHttpClientFactory httpClientFactory, IOptions<QuickBooksSettings> quickBooksSettings)
+        public InvoiceService(IHttpClientFactory httpClientFactory, IOptions<QuickBooksSettings> quickBooksSettings, IConfiguration configuration)
         {
+            _configuration = configuration;
             _httpClientFactory = httpClientFactory;
             _qBooksConfig = quickBooksSettings.Value;
             realmId = _qBooksConfig.RealmId;
             clientId = _qBooksConfig.ClientId;
             clientKey = _qBooksConfig.ClientSecret;
             refreshToken = _qBooksConfig.RefreshToken;
+            lhdnBaseUrl = _configuration["LHDNBaseUrl"];
         }
 
         public async Task<Invoice> GetInvoiceAsync(string invoiceId)
@@ -214,7 +218,7 @@ namespace EInvoiceQuickBooks.Services
             try
             {
                 var _httpClient = new HttpClient();
-                var url = $"https://dev.advintek.com.my:743/api/2024.1/QB/LoginWithQB?ClientID={clientID}&ClientKey={clientKey}&UserID={userID}";
+                var url = $"{lhdnBaseUrl}/LoginWithQB?ClientID={clientID}&ClientKey={clientKey}&UserID={userID}";
                 var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.Add("accept", "*/*");
 
@@ -246,7 +250,7 @@ namespace EInvoiceQuickBooks.Services
             try
             {
                 var _httpClient = new HttpClient();
-                var request = new HttpRequestMessage(HttpMethod.Get, $"https://dev.advintek.com.my:743/api/2024.1/QB/GetInvoiceByInvoiceNumber?invoiceNumber={invoiceId}");
+                var request = new HttpRequestMessage(HttpMethod.Get, $"{lhdnBaseUrl}/GetInvoiceByInvoiceNumber?invoiceNumber={invoiceId}");
                 request.Headers.Add("accept", "*/*");
                 request.Headers.Add("Authorization", $"Bearer {token}");
 
@@ -276,7 +280,7 @@ namespace EInvoiceQuickBooks.Services
             try
             {
                 var _httpClient = new HttpClient();
-                var request = new HttpRequestMessage(HttpMethod.Get, $"https://dev.advintek.com.my:743/api/2024.1/QB/GetInvoiceByInvoiceNumber?invoiceNumber={invoiceId}");
+                var request = new HttpRequestMessage(HttpMethod.Get, $"{lhdnBaseUrl}/GetInvoiceByInvoiceNumber?invoiceNumber={invoiceId}");
                 request.Headers.Add("accept", "*/*");
                 request.Headers.Add("Authorization", $"Bearer {token}");
 
@@ -293,9 +297,8 @@ namespace EInvoiceQuickBooks.Services
                     var quickBookDetailsElement = invoiceElement.GetProperty("quickBookDetails");
                     var quickBookDetailsJsonString = quickBookDetailsElement.GetRawText();
 
-                    string formattedJson = Regex.Unescape(quickBookDetailsJsonString).Trim('"');
+                    string formattedJson = Regex.Unescape(quickBookDetailsJsonString).Trim('"'); 
 
-                    //var jsonObject = JsonConvert.DeserializeObject(formattedJson);
                     var jsonObject = JsonConvert.DeserializeObject<JObject>(formattedJson);
                     if (jsonObject["CurrencyRef"]?["Value"] != null)
                     {
@@ -316,10 +319,20 @@ namespace EInvoiceQuickBooks.Services
                     }
 
                     // List of detail types that might appear in Line items
-                    var detailTypes = new[] { "SalesItemLineDetail", "SubTotalLineDetail", "DiscountLineDetail" };
+                    var detailTypes = new[] { "PaymentLineDetail", "DiscountLineDetail", "TaxLineDetail", "SalesItemLineDetail", 
+                                                "ItemBasedExpenseLineDetail","AccountBasedExpenseLineDetail","DepositLineDetail",
+                                                "PurchaseOrderItemLineDetail", "ItemReceiptLineDetail", "JournalEntryLineDetail",
+                                                "GroupLineDetail", "DescriptionOnly","DescriptionLineDetail", "SubTotalLineDetail",
+                                                "SalesOrderItemLineDetail", "TDSLineDetail", "ReimburseLineDetail",
+                                                "ItemAdjustmentLineDetail"};
 
                     // Properties to be removed from each detail type object
-                    var propertiesToRemove = new[] { "AnyIntuitObject", "SalesItemLineDetailEx", "TaxClassificationRef", "UOMRef", "DiscountLineDetailEx" };
+                    var propertiesToRemove = new[] { "AnyIntuitObject", "TaxClassificationRef", "UOMRef",
+                                                      "PaymentLineEx", "DiscountLineDetailEx", "TaxLineDetailEx",
+                                                      "SalesItemLineDetailEx", "ItemBasedExpenseLineDetailEx","ExpenseDetailLineDetailEx",
+                                                      "DepositLineDetailEx", "PurchaseOrderItemLineDetailEx", "ItemReceiptLineDetailEx",
+                                                      "JournalEntryLineDetailEx", "GroupLineDetailEx", "DescriptionLineDetailEx",
+                                                      "ServiceDateSpecified", "ManuallyClosedSpecified", "TDSLineDetailEx" };
 
                     // Remove specified properties from each item in the Line array
                     if (jsonObject["Line"] is JArray lineArray)
@@ -400,6 +413,27 @@ namespace EInvoiceQuickBooks.Services
                         }
                     }
 
+                    var filteredCustomFields = new JArray();
+                    foreach (var field in jsonObject["CustomField"])
+                    {
+                        var definitionId = field["DefinitionId"]?.ToString();
+                        if (definitionId != "2" && definitionId != "3")
+                        {
+                            int typeValue = field["Type"]?.ToObject<int>() ?? 0;
+                            field["Type"] = GetCustomFieldType(typeValue).ToString();
+
+                            var anyIntuitObjectValue = field["AnyIntuitObject"];
+                            ((JObject)field).Property("AnyIntuitObject")?.Remove();
+                            field[GetCustomFieldObjectKey(typeValue)] = anyIntuitObjectValue;
+
+                            filteredCustomFields.Add(field);
+                        }
+                    }
+
+                    var cujiunijni = new Intuit.Ipp.Data.CustomField();
+
+                    jsonObject["CustomField"] = filteredCustomFields;
+
                     if (isCreateNew != -1)
                     {
                         jsonObject["Id"] = invoiceId;
@@ -449,6 +483,30 @@ namespace EInvoiceQuickBooks.Services
                 "15" => LineDetailTypeEnum.ReimburseLineDetail,
                 "16" => LineDetailTypeEnum.ItemAdjustmentLineDetail,
                 _ => throw new ArgumentOutOfRangeException($"Unknown DetailType: {detailType}"),
+            };
+        }
+
+        private CustomFieldTypeEnum GetCustomFieldType(int type)
+        {
+            return type switch
+            {
+                0 => CustomFieldTypeEnum.StringType,
+                1 => CustomFieldTypeEnum.BooleanType,
+                2 => CustomFieldTypeEnum.NumberType,
+                3 => CustomFieldTypeEnum.DateType,
+                _ => throw new ArgumentOutOfRangeException($"Unknown DetailType: {type}"),
+            };
+        }
+
+        private static string GetCustomFieldObjectKey(int typeValue)
+        {
+            return typeValue switch
+            {
+                0 => "StringValue",
+                1 => "BooleanValue",
+                2 => "NumberValue",
+                3 => "DateValue",
+                _ => "StringValue",
             };
         }
 
@@ -532,7 +590,7 @@ namespace EInvoiceQuickBooks.Services
             {
                 var client = new HttpClient();
 
-                var requestUrl = "https://dev.advintek.com.my:743/api/2024.1/QB/SentPDFEmail";
+                var requestUrl = $"{lhdnBaseUrl}/SentPDFEmail";
 
                 var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
                 request.Headers.Add("accept", "*/*");
