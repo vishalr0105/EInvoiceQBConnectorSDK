@@ -227,12 +227,16 @@ namespace EInvoiceQuickBooks.Services
             return string.Empty;
         }
 
-        public async Task<string> GetQuickBooksLoginDataAsync(string clientID, string clientKey, string userID)
+        public async Task<string> GetQuickBooksLoginDataAsync(string clientID, string clientKey, string realmId)
         {
             try
             {
+                var company = await GetCompanyInfo(realmId);
+
+                var companyEmail = company.Email.Address;
+
                 var _httpClient = new HttpClient();
-                var url = $"{lhdnBaseUrl}/LoginWithQB?ClientID={clientID}&ClientKey={clientKey}&UserID={userID}";
+                var url = $"{lhdnBaseUrl}/LoginWithQB?ClientID={clientID}&ClientKey={clientKey}&EmailId={companyEmail}";
                 var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.Add("accept", "*/*");
 
