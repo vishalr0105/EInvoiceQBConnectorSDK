@@ -4,6 +4,7 @@ using Intuit.Ipp.Data;
 using Intuit.Ipp.WebhooksService;
 using Newtonsoft.Json;
 using Intuit.Ipp.OAuth2PlatformClient;
+using Intuit.Ipp.Diagnostics;
 
 namespace EInvoiceQuickBooks.Services
 {
@@ -15,7 +16,6 @@ namespace EInvoiceQuickBooks.Services
         private readonly string dummyEmail = "";
         private readonly string clientId = "";
         private readonly string clientKey = "";
-        //private readonly string realmeId = "";
 
         public WebhookProcessingService(IQueueService queueService, IServiceProvider serviceProvider, IConfiguration configuration)
         {
@@ -25,7 +25,6 @@ namespace EInvoiceQuickBooks.Services
             dummyEmail = _configuration["DummyEmail"];
             clientId = _configuration["QuickBooksSettings:ClientId"];
             clientKey = _configuration["QuickBooksSettings:ClientSecret"];
-            //realmeId = _configuration["QuickBooksSettings:RealmId"];
         }
 
         protected override async System.Threading.Tasks.Task ExecuteAsync(CancellationToken stoppingToken)
@@ -340,7 +339,7 @@ namespace EInvoiceQuickBooks.Services
                             if (createRes.Status.ToLower() == "success")
                             {
                                 var sendEmailRes = await invoiceService.SendInvoiceEmailAsync(createRes.Data.Id, realmId);
-                                //Log success
+
                                 Console.WriteLine($"Cannot Delete invoice once sent to Tax Office. Created back Invoice - {createRes.Data.Id}.");
                                 LogInfo($"Cannot Delete invoice once sent to Tax Office. Created back Invoice - {createRes.Data.Id}.");
                             }
@@ -512,7 +511,6 @@ namespace EInvoiceQuickBooks.Services
                             return $"A LongId was not found for this UUID";
                         }
 
-                        //var getSubmitDocDetailsResp = await invoiceService.GetSubmitDocumentDetails(submitResp, tokenResp);
                         resProcessInvoice = await invoiceService.ProcessInvoiceMethod(requestProgress, tokenResp);
                     }
 
@@ -548,7 +546,7 @@ namespace EInvoiceQuickBooks.Services
                 CurrencyExchangeRate = "1.00000",
                 PaymentMode = "03",
                 PaymentTerms = "30 days from invoice date",
-                PaymentDueDate = invoice.DueDate.ToString("yyyy-MM-dd") ,//"2024-01-28",
+                PaymentDueDate = invoice.DueDate.ToString("yyyy-MM-dd"),//"2024-01-28",
                 BillReferenceNumber = "PO NO: 3261164188",
                 SellerBankAccountNumber = "MBBEMYKL#514356100499",
                 SellerName = !string.IsNullOrEmpty(company.CompanyName) ? company.CompanyName : "Advintek Consulting Services Sdn. Bhd.",
@@ -558,7 +556,7 @@ namespace EInvoiceQuickBooks.Services
                 SellerSSTRegistrationNumber = "NA",
                 SellerEmail = company.Email?.Address ?? "info@advintek.com.my",
                 SellerMalaysiaStandardIndustrialClassificationCode = "30910",
-                SellerContactNumber = !string.IsNullOrEmpty(company.Mobile?.FreeFormNumber) ? company.Mobile.FreeFormNumber 
+                SellerContactNumber = !string.IsNullOrEmpty(company.Mobile?.FreeFormNumber) ? company.Mobile.FreeFormNumber
                                     : !string.IsNullOrEmpty(company.PrimaryPhone?.FreeFormNumber) ? company.PrimaryPhone.FreeFormNumber
                                     : "0123456789", //"+60122672127",
                 SellerAddressLine0 = company.LegalAddr?.Line1,
@@ -583,8 +581,8 @@ namespace EInvoiceQuickBooks.Services
                 BuyerAddressLine2 = invoice.BillAddr?.Line3,
                 BuyerPostalZone = invoice.BillAddr?.PostalCode ?? " ",
                 BuyerCityName = invoice.BillAddr?.City ?? "Kuala Lumpur",
-                BuyerState =  "14",//invoice.BillAddr?.CountrySubDivisionCode ??
-                BuyerCountry =  "MYS",//invoice.BillAddr?.Country ??
+                BuyerState = "14",//invoice.BillAddr?.CountrySubDivisionCode ??
+                BuyerCountry = "MYS",//invoice.BillAddr?.Country ??
                 SumOfInvoiceLineNetAmount = invoice.TotalAmt.ToString(),
                 SumOfAllowancesOnDocumentLevel = "0.00",
                 TotalFeeOrChargeAmount = "0.00",
@@ -656,7 +654,7 @@ namespace EInvoiceQuickBooks.Services
                     Measurement = "WE",
                     Subtotal = invoice.TotalAmt.ToString() ?? "0",
                     SSTTaxCategory = null,
-                    TaxType =  "06",//invoice.TxnTaxDetail?.TxnTaxCodeRef?.Value ??
+                    TaxType = "06",//invoice.TxnTaxDetail?.TxnTaxCodeRef?.Value ??
                     TaxRate = "0.0",
                     TaxAmount = invoice.TxnTaxDetail?.TotalTax.ToString() ?? "0",
                     DetailsOfTaxExemption = null,

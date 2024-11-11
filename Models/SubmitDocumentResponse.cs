@@ -7,6 +7,7 @@
         public bool? IsSuccess { get; set; }
         public object? Data { get; set; }
     }
+
     public class AcceptedDocument
     {
         public string? Uuid { get; set; }
@@ -15,9 +16,13 @@
 
     public class Data
     {
-        public string? SubmissionUid { get; set; }
-        public List<AcceptedDocument>? AcceptedDocuments { get; set; }
-        public List<object>? RejectedDocuments { get; set; }
+        public string InvoiceId { get; set; }
+        public string Uuid { get; set; }
+        public string InvoiceCodeNumber { get; set; }
+
+        //public string? SubmissionUid { get; set; }
+        //public List<AcceptedDocument>? AcceptedDocuments { get; set; }
+        //public List<object>? RejectedDocuments { get; set; }
     }
 
     public class LoginData

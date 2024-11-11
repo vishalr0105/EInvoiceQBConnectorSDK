@@ -12,6 +12,7 @@ using EInvoiceQuickBooks.Models1;
 using Newtonsoft.Json.Linq;
 using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
+using Intuit.Ipp.Diagnostics;
 
 namespace EInvoiceQuickBooks.Services
 {
@@ -20,7 +21,6 @@ namespace EInvoiceQuickBooks.Services
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly QuickBooksSettings _qBooksConfig;
         private readonly IConfiguration _configuration;
-        //private readonly string realmId;
         private readonly string clientId;
         private readonly string clientKey;
         private readonly string refreshToken;
@@ -31,7 +31,6 @@ namespace EInvoiceQuickBooks.Services
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
             _qBooksConfig = quickBooksSettings.Value;
-            //realmId = _qBooksConfig.RealmId;
             clientId = _qBooksConfig.ClientId;
             clientKey = _qBooksConfig.ClientSecret;
             refreshToken = _qBooksConfig.RefreshToken;
@@ -153,13 +152,11 @@ namespace EInvoiceQuickBooks.Services
                 var url = $"{_qBooksConfig.BaseUrl}/v3/company/{realmId}/invoice/{invoiceId}/send";
                 var request = new HttpRequestMessage(HttpMethod.Post, url);
                 request.Headers.Add("Authorization", $"Bearer {accessToken}");
-                //request.Headers.Add("Content-Type", "application/json");
 
                 var content = new StringContent(string.Empty);
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
                 request.Content = content;
 
-                // Send the request and get the response
                 var response = await client.SendAsync(request);
                 string responseBody = await response.Content.ReadAsStringAsync();
 
@@ -224,7 +221,6 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
-                // Handle any other exceptions
                 Console.WriteLine($"An error occurred: {ex.Message}");
                 return string.Empty;
             }
@@ -275,43 +271,38 @@ namespace EInvoiceQuickBooks.Services
                 {
                     var jsonString = await response.Content.ReadAsStringAsync();
                     var document = JsonDocument.Parse(jsonString);
-                        
-                    // Get the "data"-"invoice"-"quickBookDetails" field
+
                     var dataElement = document.RootElement.GetProperty("data");
                     var invoiceElement = dataElement.GetProperty("invoice");
                     var quickBookDetailsElement = invoiceElement.GetProperty("quickBookDetails");
                     var quickBookDetailsJsonString = quickBookDetailsElement.GetRawText();
 
-                    string formattedJson = Regex.Unescape(quickBookDetailsJsonString).Trim('"'); 
+                    string formattedJson = Regex.Unescape(quickBookDetailsJsonString).Trim('"');
 
                     var jsonObject = JsonConvert.DeserializeObject<JObject>(formattedJson);
                     if (jsonObject["CurrencyRef"]?["Value"] != null)
                     {
-                        // Change "Value" to "value" in CurrencyRef
                         jsonObject["CurrencyRef"]["value"] = jsonObject["CurrencyRef"]["Value"];
-                        ((JObject)jsonObject["CurrencyRef"]).Property("Value")?.Remove();
 
+                        ((JObject)jsonObject["CurrencyRef"]).Property("Value")?.Remove();
                         ((JObject)jsonObject["CurrencyRef"]).Property("type")?.Remove();
                     }
 
                     if (jsonObject["CustomerRef"]?["Value"] != null)
                     {
-                        // Change "Value" to "value" in CustomerRef
                         jsonObject["CustomerRef"]["value"] = jsonObject["CustomerRef"]["Value"];
-                        ((JObject)jsonObject["CustomerRef"]).Property("Value")?.Remove();
 
+                        ((JObject)jsonObject["CustomerRef"]).Property("Value")?.Remove();
                         ((JObject)jsonObject["CustomerRef"]).Property("type")?.Remove();
                     }
 
-                    // List of detail types that might appear in Line items
-                    var detailTypes = new[] { "PaymentLineDetail", "DiscountLineDetail", "TaxLineDetail", "SalesItemLineDetail", 
+                    var detailTypes = new[] { "PaymentLineDetail", "DiscountLineDetail", "TaxLineDetail", "SalesItemLineDetail",
                                                 "ItemBasedExpenseLineDetail","AccountBasedExpenseLineDetail","DepositLineDetail",
                                                 "PurchaseOrderItemLineDetail", "ItemReceiptLineDetail", "JournalEntryLineDetail",
                                                 "GroupLineDetail", "DescriptionOnly","DescriptionLineDetail", "SubTotalLineDetail",
                                                 "SalesOrderItemLineDetail", "TDSLineDetail", "ReimburseLineDetail",
                                                 "ItemAdjustmentLineDetail"};
 
-                    // Properties to be removed from each detail type object
                     var propertiesToRemove = new[] { "AnyIntuitObject", "TaxClassificationRef", "UOMRef",
                                                       "PaymentLineEx", "DiscountLineDetailEx", "TaxLineDetailEx",
                                                       "SalesItemLineDetailEx", "ItemBasedExpenseLineDetailEx","ExpenseDetailLineDetailEx",
@@ -319,7 +310,6 @@ namespace EInvoiceQuickBooks.Services
                                                       "JournalEntryLineDetailEx", "GroupLineDetailEx", "DescriptionLineDetailEx",
                                                       "ServiceDateSpecified", "ManuallyClosedSpecified", "TDSLineDetailEx" };
 
-                    // Remove specified properties from each item in the Line array
                     if (jsonObject["Line"] is JArray lineArray)
                     {
                         foreach (JObject lineItem in lineArray)
@@ -414,8 +404,6 @@ namespace EInvoiceQuickBooks.Services
                             filteredCustomFields.Add(field);
                         }
                     }
-
-                    var cujiunijni = new Intuit.Ipp.Data.CustomField();
 
                     jsonObject["CustomField"] = filteredCustomFields;
 
@@ -528,14 +516,13 @@ namespace EInvoiceQuickBooks.Services
                             }
                             var dataObject = JsonConvert.DeserializeObject<Data>(apiResponse.Data.ToString());
 
-                            if (dataObject?.AcceptedDocuments?.Count > 0)
-                                return dataObject.AcceptedDocuments.FirstOrDefault()?.Uuid;
+                            if (dataObject != null)
+                                return dataObject.Uuid;
 
-                            return resp; // Return raw JSON if accepted documents are empty
+                            return resp;
                         }
                     }
 
-                    // Log or handle errors if status code is not successful
                     var errorResponse = await response.Content.ReadAsStringAsync();
                     Console.WriteLine($"Error Response: {errorResponse}");
                     return errorResponse;
@@ -546,45 +533,6 @@ namespace EInvoiceQuickBooks.Services
                 return "exception";
             }
         }
-
-        #region GetSubmitDocumentDetails comment
-
-        //public async Task<string> GetSubmitDocumentDetails(string uuid, string token)
-        //{
-        //    try
-        //    {
-        //        string uuid1 = "";
-        //        using (JsonDocument doc = JsonDocument.Parse(uuid))
-        //        {
-        //            // Navigate to the 'uuid' field within the 'data' object
-        //            uuid1 = doc.RootElement
-        //                             .GetProperty("data")
-        //                             .GetProperty("uuid")
-        //                             .GetString();
-
-        //            // Output the extracted UUID
-        //            Console.WriteLine(uuid1);
-        //        }
-
-        //        var client = new HttpClient();
-
-        //        var requestUrl = $"https://dev.advintek.com.my:743/api/LightWeight/GetSubmitDocumentDetails?uuid={uuid1}";
-
-        //        var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
-        //        request.Headers.Add("accept", "*/*");
-        //        request.Headers.Add("Authorization", $"Bearer {token}");
-
-        //        var response = await client.SendAsync(request);
-
-        //        return await response.Content.ReadAsStringAsync();
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        throw ex;
-        //    }
-        //}
-
-        #endregion
 
         public async Task<string> ProcessInvoiceMethod(ProcessRequest input, string token)
         {
