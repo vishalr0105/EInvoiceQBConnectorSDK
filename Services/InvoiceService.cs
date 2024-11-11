@@ -2,26 +2,15 @@
 using Intuit.Ipp.Core;
 using Intuit.Ipp.Data;
 using Intuit.Ipp.DataService;
-using Intuit.Ipp.QueryFilter;
 using Intuit.Ipp.Security;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
-using System.Security.Authentication;
-using System.Security.Claims;
-using System.Security.Policy;
 using System.Text;
 using System.Text.Json;
 using Intuit.Ipp.OAuth2PlatformClient;
 using EInvoiceQuickBooks.Models1;
-using Intuit.Ipp.Core.Configuration;
 using Newtonsoft.Json.Linq;
 using System.Net.Http.Headers;
-using System;
-using Intuit.Ipp.Exception;
-using System.Net.Http;
-using System.Xml.Serialization;
-using System.ComponentModel.Design;
 using System.Text.RegularExpressions;
 
 namespace EInvoiceQuickBooks.Services
@@ -204,28 +193,6 @@ namespace EInvoiceQuickBooks.Services
         }
 
         #region LHDN API's calling
-
-        public async Task<string> LoginAsync(string loginId, string password, string domain)
-        {
-            var _httpClient = new HttpClient();
-            var request = new HttpRequestMessage(HttpMethod.Post, "https://dev.advintek.com.my:743/api/2024.1/eInvoice/Login");
-            request.Headers.Add("accept", "*/*");
-
-            var content = new StringContent($"{{\n  \"loginId\": \"{loginId}\",\n  \"password\": \"{password}\",\n  \"domain\": \"{domain}\"\n}}", null, "application/json");
-            request.Content = content;
-
-            var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            if (response.IsSuccessStatusCode)
-            {
-                var resp = await response.Content.ReadAsStringAsync();
-                var apiResponse = JsonConvert.DeserializeObject<SubmitDocumentResponse>(resp);
-                var dataObject = JsonConvert.DeserializeObject<LoginData>(apiResponse?.Data?.ToString());
-                var token = dataObject?.Token;
-                return token;
-            }
-            return string.Empty;
-        }
 
         public async Task<string> GetQuickBooksLoginDataAsync(string clientID, string clientKey, string realmId)
         {
@@ -534,7 +501,7 @@ namespace EInvoiceQuickBooks.Services
             {
                 using (var client = new HttpClient())
                 {
-                    var requestUrl = "https://dev.advintek.com.my:743/api/2024.1/eInvoice/eInvoiceCreateRequest";
+                    var requestUrl = $"{lhdnBaseUrl}/eInvoiceCreateRequest";
                     var request = new HttpRequestMessage(HttpMethod.Post, requestUrl)
                     {
                         Content = new StringContent(

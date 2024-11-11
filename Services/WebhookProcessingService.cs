@@ -3,17 +3,7 @@ using EInvoiceQuickBooks.Models1;
 using Intuit.Ipp.Data;
 using Intuit.Ipp.WebhooksService;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using System.Text.Json.Nodes;
-using System.Text.Json;
-using Serilog;
-using System.Net.WebSockets;
 using Intuit.Ipp.OAuth2PlatformClient;
-using System.Text.RegularExpressions;
-using System.Linq;
-using Microsoft.Extensions.Options;
-using System.Configuration;
-using System.Text;
 
 namespace EInvoiceQuickBooks.Services
 {
@@ -397,7 +387,7 @@ namespace EInvoiceQuickBooks.Services
                                             DefinitionId = "1",
                                             Name = "Original Email",
                                             Type = CustomFieldTypeEnum.StringType,
-                                            AnyIntuitObject = originalInvoice.BillEmail?.Address ?? dummyEmail,
+                                            AnyIntuitObject = !String.IsNullOrEmpty(originalInvoice.BillEmail?.Address) ?originalInvoice.BillEmail?.Address : dummyEmail,
                                         }
                                     }.ToArray(),
                             CustomerRef = originalInvoice.CustomerRef,
@@ -461,7 +451,7 @@ namespace EInvoiceQuickBooks.Services
 
         #region Process
 
-        public async Task<string> ProcessMethod(Invoice originalInvoice, string invoiceId, int isResend, string realmId)
+        private async Task<string> ProcessMethod(Invoice originalInvoice, string invoiceId, int isResend, string realmId)
         {
             try
             {
@@ -492,7 +482,7 @@ namespace EInvoiceQuickBooks.Services
                     {
                         var company = await invoiceService.GetCompanyInfo(realmId);
                         var req = GetBaseInvoiceRequest(originalInvoice, company);
-                        var json = JsonConvert.SerializeObject(req, Formatting.Indented);
+                        //var json = JsonConvert.SerializeObject(req, Formatting.Indented);
                         string submitResp;
                         var count = 0;
                         do
@@ -508,7 +498,11 @@ namespace EInvoiceQuickBooks.Services
                         if (submitResp.Contains("e-Invoice Code or Number is already in use"))
                         {
                             resProcessInvoice = await invoiceService.ProcessInvoiceMethod(requestProgress, tokenResp);
-                            return "success";
+                            if (resProcessInvoice.Contains("Email sent successfully"))
+                            {
+                                return "success";
+                            }
+                            return "failure";
                         }
                         else if (submitResp.ToLower().Contains("validation error"))
                         {
@@ -516,7 +510,7 @@ namespace EInvoiceQuickBooks.Services
                         }
                         if (submitResp.Contains("\"statusCode\":400"))
                         {
-                            return $"A LongId was not found for this UUID:G7VQQPMVY9KKGPB8WW7AKYBJ10";
+                            return $"A LongId was not found for this UUID";
                         }
 
                         var getSubmitDocDetailsResp = await invoiceService.GetSubmitDocumentDetails(submitResp, tokenResp);
@@ -539,9 +533,9 @@ namespace EInvoiceQuickBooks.Services
 
         #endregion
 
-        #region Request formation
+        #region LHDN eInvoice Create Request formation
 
-        public InvoiceRequest GetBaseInvoiceRequest(Invoice invoice, Company company)
+        private InvoiceRequest GetBaseInvoiceRequest(Invoice invoice, Company company)
         {
             return new InvoiceRequest
             {
@@ -555,29 +549,29 @@ namespace EInvoiceQuickBooks.Services
                 CurrencyExchangeRate = "1.00000",
                 PaymentMode = "03",
                 PaymentTerms = "30 days from invoice date",
-                PaymentDueDate = "2024-01-28",
+                PaymentDueDate = invoice.DueDate.ToString("yyyy-MM-dd") ,//"2024-01-28",
                 BillReferenceNumber = "PO NO: 3261164188",
                 SellerBankAccountNumber = "MBBEMYKL#514356100499",
-                SellerName = company.CompanyName, //"Advintek Consulting Services Sdn. Bhd.",
+                SellerName = !string.IsNullOrEmpty(company.CompanyName) ? company.CompanyName : "Advintek Consulting Services Sdn. Bhd.",
                 SellerTIN = "C26072927020",
                 SellerCategory = "BRN",
                 SellerBusinessRegistrationNumber = "201901029037",
                 SellerSSTRegistrationNumber = "NA",
-                SellerEmail = company.Email.Address, //"info@advintek.com.my",
+                SellerEmail = !string.IsNullOrEmpty(company.Email.Address) ? company.Email.Address : "info@advintek.com.my",
                 SellerMalaysiaStandardIndustrialClassificationCode = "30910",
                 SellerContactNumber = !string.IsNullOrEmpty(company.Mobile?.FreeFormNumber) ? company.Mobile.FreeFormNumber 
                                     : !string.IsNullOrEmpty(company.PrimaryPhone?.FreeFormNumber) ? company.PrimaryPhone.FreeFormNumber
-                                    : "0123456789",// "+60122672127",
-                SellerAddressLine0 = !string.IsNullOrEmpty(company.LegalAddr.Line1) ? company.LegalAddr.Line1 : string.Empty, //"Menara Centara,",
-                SellerAddressLine1 = !string.IsNullOrEmpty(company.LegalAddr.Line2) ? company.LegalAddr.Line2 : string.Empty,//"Level 20 Unit 1,360,Jalan Tuanku Abdul",
-                SellerAddressLine2 = !string.IsNullOrEmpty(company.LegalAddr.Line3) ? company.LegalAddr.Line3 : string.Empty,//"Rahman Kuala Lumpur 50100 Malaysia,",
-                SellerPostalZone = !string.IsNullOrEmpty(company.LegalAddr.PostalCode) ? company.LegalAddr.PostalCode : string.Empty,// "50100",
-                SellerCityName = !string.IsNullOrEmpty(company.LegalAddr.City) ? company.LegalAddr.City : string.Empty,// "Kuala Lumpur",
-                SellerState =!string.IsNullOrEmpty( company.LegalAddr.CountrySubDivisionCode) ? company.LegalAddr.CountrySubDivisionCode : string.Empty,//"01",
-                SellerCountry = !string.IsNullOrEmpty(company.Country) ? company.Country : string.Empty,//"MYS",
+                                    : "0123456789", //"+60122672127",
+                SellerAddressLine0 = company.LegalAddr?.Line1,
+                SellerAddressLine1 = company.LegalAddr?.Line2,
+                SellerAddressLine2 = company.LegalAddr?.Line3,
+                SellerPostalZone = !string.IsNullOrEmpty(company.LegalAddr.PostalCode) ? company.LegalAddr.PostalCode : "50100",
+                SellerCityName = !string.IsNullOrEmpty(company.LegalAddr.City) ? company.LegalAddr.City : "Kuala Lumpur",
+                SellerState =!string.IsNullOrEmpty( company.LegalAddr.CountrySubDivisionCode) ? company.LegalAddr.CountrySubDivisionCode : " ",    //"01",
+                SellerCountry = !string.IsNullOrEmpty(company.Country) ? company.Country : "MYS",
                 SellerBusinessActivityDescription = "MEDICAL LABORATORIES",
                 SellerMSIC = "46201",
-                BuyerName = invoice.CustomerRef.Value, //"Nityo Infotech Services Sdn. Bhd.",
+                BuyerName = invoice.CustomerRef.Value,  //"Nityo Infotech Services Sdn. Bhd.",
                 BuyerTIN = "C20307408040",
                 BuyerCategory = "BRN",
                 BuyerBusinessRegistrationNumber = "200601028904",
@@ -585,13 +579,13 @@ namespace EInvoiceQuickBooks.Services
                 BuyerSSTRegistrationNumber = "B10-1808-22000011",
                 BuyerEmail = invoice.CustomField.Where(c => c.DefinitionId == "1" && c.AnyIntuitObject != null).Select(c => c.AnyIntuitObject.ToString()).FirstOrDefault() ?? dummyEmail,
                 BuyerContactNumber = "16097995959",
-                BuyerAddressLine0 = string.IsNullOrEmpty(invoice.ShipAddr.Line1) ? invoice.ShipAddr.Line1 : string.Empty ,// "Unit #35-01B , Q Sentral No.2A,",
-                BuyerAddressLine1 = string.IsNullOrEmpty(invoice.ShipAddr.Line2) ? invoice.ShipAddr.Line2 : string.Empty , //"Jalan Stesen Sentral 2,",
-                BuyerAddressLine2 = string.IsNullOrEmpty(invoice.ShipAddr.Line3) ? invoice.ShipAddr.Line3 : string.Empty,//"Kuala Lumpur Sentral,",
-                BuyerPostalZone = string.IsNullOrEmpty(invoice.ShipAddr.PostalCode) ? invoice.ShipAddr.PostalCode : string.Empty,//"50470",
-                BuyerCityName = string.IsNullOrEmpty(invoice.ShipAddr.City) ? invoice.ShipAddr.City : string.Empty, //"Kuala Lumpur",
-                BuyerState = string.IsNullOrEmpty(invoice.ShipAddr.CountrySubDivisionCode) ? invoice.ShipAddr.CountrySubDivisionCode : string.Empty,//"14",
-                BuyerCountry = string.IsNullOrEmpty(invoice.ShipAddr.Country) ? invoice.ShipAddr.Country : string.Empty, // "MYS",
+                BuyerAddressLine0 = !string.IsNullOrEmpty(invoice.BillAddr.Line1) ? invoice.BillAddr.Line1 : "Line 1",
+                BuyerAddressLine1 = !string.IsNullOrEmpty(invoice.BillAddr.Line2) ? invoice.BillAddr.Line2 : null ,  //"Jalan Stesen Sentral 2,",
+                BuyerAddressLine2 = !string.IsNullOrEmpty(invoice.BillAddr.Line3) ? invoice.BillAddr.Line3 : null,   //"Kuala Lumpur Sentral,",
+                BuyerPostalZone = !string.IsNullOrEmpty(invoice.BillAddr.PostalCode) ? invoice.BillAddr.PostalCode : " ",   //"50470",
+                BuyerCityName = !string.IsNullOrEmpty(invoice.BillAddr.City) ? invoice.BillAddr.City : "Kuala Lumpur",
+                BuyerState = !string.IsNullOrEmpty(invoice.BillAddr.CountrySubDivisionCode) ? invoice.BillAddr.CountrySubDivisionCode : "14",
+                BuyerCountry = !string.IsNullOrEmpty(invoice.BillAddr.Country) ? invoice.BillAddr.Country : "MYS",
                 SumOfInvoiceLineNetAmount = invoice.TotalAmt.ToString(),
                 SumOfAllowancesOnDocumentLevel = "0.00",
                 TotalFeeOrChargeAmount = "0.00",
@@ -696,6 +690,7 @@ namespace EInvoiceQuickBooks.Services
 
             return jsonString;
         }
+
         #endregion
 
         #region Logging

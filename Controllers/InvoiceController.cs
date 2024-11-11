@@ -1,9 +1,6 @@
 ﻿using EInvoiceQuickBooks.Models;
 using EInvoiceQuickBooks.Services;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using System.Xml.Serialization;
-using static System.Net.WebRequestMethods;
 
 namespace EInvoiceQuickBooks.Controllers
 {
@@ -17,13 +14,6 @@ namespace EInvoiceQuickBooks.Controllers
         public InvoiceController(InvoiceService invoiceSevice)
         {
             _invoiceService = invoiceSevice;
-        }
-
-        [HttpGet("GetCompanyInfo")]
-        public async Task<object> GetCompanyInfo(string realmId)
-        {
-            var res = await _invoiceService.GetCompanyInfo(realmId);
-            return res;
         }
 
         #region short url
