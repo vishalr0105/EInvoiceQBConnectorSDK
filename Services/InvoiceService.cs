@@ -31,7 +31,7 @@ namespace EInvoiceQuickBooks.Services
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly QuickBooksSettings _qBooksConfig;
         private readonly IConfiguration _configuration;
-        private readonly string realmId;
+        //private readonly string realmId;
         private readonly string clientId;
         private readonly string clientKey;
         private readonly string refreshToken;
@@ -42,14 +42,14 @@ namespace EInvoiceQuickBooks.Services
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
             _qBooksConfig = quickBooksSettings.Value;
-            realmId = _qBooksConfig.RealmId;
+            //realmId = _qBooksConfig.RealmId;
             clientId = _qBooksConfig.ClientId;
             clientKey = _qBooksConfig.ClientSecret;
             refreshToken = _qBooksConfig.RefreshToken;
             lhdnBaseUrl = _configuration["LHDNBaseUrl"];
         }
 
-        public async Task<Invoice> GetInvoiceAsync(string invoiceId)
+        public async Task<Invoice> GetInvoiceAsync(string invoiceId, string realmId)
         {
             try
             {
@@ -69,7 +69,7 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
-        public async Task<object> GetInvoicePDFAsync(string invoiceId)
+        public async Task<object> GetInvoicePDFAsync(string invoiceId, string realmId)
         {
             try
             {
@@ -89,7 +89,7 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
-        public async Task<Invoice> UpdateInvoice(Invoice invoiceToUpdate)
+        public async Task<Invoice> UpdateInvoice(Invoice invoiceToUpdate, string realmId)
         {
             try
             {
@@ -111,7 +111,7 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
-        public async Task<CreateOrUpdateInvoiceResponse> CreateOrUpdateInvoice(object invoiceUpdate)
+        public async Task<CreateOrUpdateInvoiceResponse> CreateOrUpdateInvoice(object invoiceUpdate, string realmId)
         {
             try
             {
@@ -154,14 +154,14 @@ namespace EInvoiceQuickBooks.Services
         }
 
         //Explicitly Send the Invoice Email
-        public async Task<string> SendInvoiceEmailAsync(string invoiceId)
+        public async Task<string> SendInvoiceEmailAsync(string invoiceId, string realmId)
         {
             try
             {
                 var accessToken = await GetAccessToken();
                 HttpClient client = new HttpClient();
 
-                var url = $"https://sandbox-quickbooks.api.intuit.com/v3/company/{realmId}/invoice/{invoiceId}/send";
+                var url = $"{_qBooksConfig.BaseUrl}/v3/company/{realmId}/invoice/{invoiceId}/send";
                 var request = new HttpRequestMessage(HttpMethod.Post, url);
                 request.Headers.Add("Authorization", $"Bearer {accessToken}");
                 //request.Headers.Add("Content-Type", "application/json");
@@ -187,6 +187,20 @@ namespace EInvoiceQuickBooks.Services
                 Console.WriteLine($"General error: {ex.Message}");
                 return "failure";
             }
+        }
+
+        public async Task<Company> GetCompanyInfo(string realmId)
+        {
+            var accessToken = await GetAccessToken();
+            var oauthValidator = new OAuth2RequestValidator(accessToken);
+            var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
+            var dataService = new DataService(serviceContext);
+
+            serviceContext.IppConfiguration.Message.Request.SerializationFormat = Intuit.Ipp.Core.Configuration.SerializationFormat.Json;
+            serviceContext.IppConfiguration.Message.Response.SerializationFormat = Intuit.Ipp.Core.Configuration.SerializationFormat.Json;
+
+            var company = dataService.FindById(new Company() { Id = realmId });
+            return company;
         }
 
         #region LHDN API's calling
@@ -601,7 +615,6 @@ namespace EInvoiceQuickBooks.Services
                 request.Content = content;
 
                 var response = await client.SendAsync(request);
-                //response.EnsureSuccessStatusCode();
                 return await response.Content.ReadAsStringAsync();
             }
             catch (Exception ex)

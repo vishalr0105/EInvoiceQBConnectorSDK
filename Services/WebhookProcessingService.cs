@@ -25,7 +25,7 @@ namespace EInvoiceQuickBooks.Services
         private readonly string dummyEmail = "";
         private readonly string clientId = "";
         private readonly string clientKey = "";
-        private readonly string realmeId = "";
+        //private readonly string realmeId = "";
 
         public WebhookProcessingService(IQueueService queueService, IServiceProvider serviceProvider, IConfiguration configuration)
         {
@@ -35,7 +35,7 @@ namespace EInvoiceQuickBooks.Services
             dummyEmail = _configuration["DummyEmail"];
             clientId = _configuration["QuickBooksSettings:ClientId"];
             clientKey = _configuration["QuickBooksSettings:ClientSecret"];
-            realmeId = _configuration["QuickBooksSettings:RealmId"];
+            //realmeId = _configuration["QuickBooksSettings:RealmId"];
         }
 
         protected override async System.Threading.Tasks.Task ExecuteAsync(CancellationToken stoppingToken)
@@ -75,25 +75,26 @@ namespace EInvoiceQuickBooks.Services
 
                 var invoiceId = webhookEvents.EventNotifications.First().DataChangeEvent.Entities.FirstOrDefault()?.Id;
                 var operation = webhookEvents.EventNotifications.First().DataChangeEvent.Entities.FirstOrDefault()?.Operation;
+                var realmId = webhookEvents.EventNotifications.First().RealmId;
                 var syncToken = "";
 
                 Console.WriteLine($"Processing {operation} operation on invoice with id: {invoiceId}");
                 LogInfo($"Processing {operation} operation on invoice with id: {invoiceId}");
 
-                string token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmeId);
+                string token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
 
                 if (operation == "Emailed")
                 {
-                    token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmeId);
+                    token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
                     var check = await invoiceService.CheckAlreadyExists(invoiceId, token);
-                    var originalInvoice = await invoiceService.GetInvoiceAsync(invoiceId);
+                    var originalInvoice = await invoiceService.GetInvoiceAsync(invoiceId, realmId);
 
                     if (originalInvoice != null)
                     {
                         syncToken = originalInvoice.SyncToken.ToString();
                         if (check == 0)
                         {
-                            var res = await ProcessMethod(originalInvoice, invoiceId, check);
+                            var res = await ProcessMethod(originalInvoice, invoiceId, check, realmId);
 
                             Invoice updateInvoiceInput = new Invoice();
                             if (res.ToLower() == "success" || res.Contains("A LongId was not found for this UUID"))
@@ -150,7 +151,7 @@ namespace EInvoiceQuickBooks.Services
                             }
                             if (updateInvoiceInput != null)
                             {
-                                var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput);
+                                var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
                                 if (updateRes is Invoice && updateRes != null)
                                 {
                                     if (res == "success")
@@ -184,7 +185,7 @@ namespace EInvoiceQuickBooks.Services
 
                             if (originalInvoiceSyncToken == lastSyncToken)
                             {
-                                var res = await ProcessMethod(originalInvoice, invoiceId, check);
+                                var res = await ProcessMethod(originalInvoice, invoiceId, check, realmId);
 
                                 Invoice updateInvoiceInput = new Invoice();
 
@@ -241,7 +242,7 @@ namespace EInvoiceQuickBooks.Services
                                 }
                                 if (updateInvoiceInput != null)
                                 {
-                                    var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput);
+                                    var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
                                     if (updateRes is Invoice && updateRes != null)
                                     {
                                         if (res == "success")
@@ -262,11 +263,11 @@ namespace EInvoiceQuickBooks.Services
                                 //if resend and updated code goes here
                                 var dbInvoice = await invoiceService.GetDBInvoice(invoiceId, token, Convert.ToInt32(syncToken), dummyEmail);
 
-                                var createRes = await invoiceService.CreateOrUpdateInvoice(dbInvoice);
+                                var createRes = await invoiceService.CreateOrUpdateInvoice(dbInvoice, realmId);
 
                                 if (createRes.Status.ToLower() == "success")
                                 {
-                                    var res = await ProcessMethod(originalInvoice, invoiceId, check);
+                                    var res = await ProcessMethod(originalInvoice, invoiceId, check, realmId);
 
                                     Invoice updateInvoiceInput = new Invoice();
 
@@ -323,7 +324,7 @@ namespace EInvoiceQuickBooks.Services
                                     }
                                     if (updateInvoiceInput != null)
                                     {
-                                        var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput);
+                                        var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
                                     }
 
                                     //Log success
@@ -342,13 +343,13 @@ namespace EInvoiceQuickBooks.Services
                     {
                         try
                         {
-                            token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmeId);
+                            token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
                             var dbInvoice = await invoiceService.GetDBInvoice(invoiceId, token, -1, dummyEmail);
 
-                            var createRes = await invoiceService.CreateOrUpdateInvoice(dbInvoice);
+                            var createRes = await invoiceService.CreateOrUpdateInvoice(dbInvoice, realmId);
                             if (createRes.Status.ToLower() == "success")
                             {
-                                var sendEmailRes = await invoiceService.SendInvoiceEmailAsync(createRes.Data.Id);
+                                var sendEmailRes = await invoiceService.SendInvoiceEmailAsync(createRes.Data.Id, realmId);
                                 //Log success
                                 Console.WriteLine($"Cannot Delete invoice once sent to Tax Office. Created back Invoice - {createRes.Data.Id}.");
                                 LogInfo($"Cannot Delete invoice once sent to Tax Office. Created back Invoice - {createRes.Data.Id}.");
@@ -368,7 +369,7 @@ namespace EInvoiceQuickBooks.Services
                 }
                 else if (operation == "Create")
                 {
-                    var originalInvoice = await invoiceService.GetInvoiceAsync(invoiceId);
+                    var originalInvoice = await invoiceService.GetInvoiceAsync(invoiceId, realmId);
                     if (originalInvoice != null)
                     {
                         var updateInvoiceInput = new Invoice()
@@ -402,7 +403,7 @@ namespace EInvoiceQuickBooks.Services
                             CustomerRef = originalInvoice.CustomerRef,
                             Line = originalInvoice.Line
                         };
-                        var resUpdateEmail = await invoiceService.UpdateInvoice(updateInvoiceInput);
+                        var resUpdateEmail = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
                     }
 
                     Console.WriteLine($"Updated Email-field for newly created invoice - {invoiceId}.");
@@ -410,7 +411,7 @@ namespace EInvoiceQuickBooks.Services
                 }
                 else if (operation == "Update")
                 {
-                    var originalInvoice = await invoiceService.GetInvoiceAsync(invoiceId);
+                    var originalInvoice = await invoiceService.GetInvoiceAsync(invoiceId, realmId);
 
                     var flag = false;
                     var emailCheck = originalInvoice.BillEmail;
@@ -445,7 +446,7 @@ namespace EInvoiceQuickBooks.Services
                                 CustomerRef = originalInvoice.CustomerRef,
                                 Line = originalInvoice.Line
                             };
-                            var resUpdateEmail = await invoiceService.UpdateInvoice(updateInvoiceInput);
+                            var resUpdateEmail = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
 
                             Console.WriteLine($"Found an attempt to update Email-field, Reverted back for Invoice - {invoiceId}");
                             LogInfo($"Found an attempt to update Email-field, Reverted back for Invoice - {invoiceId}");
@@ -460,7 +461,7 @@ namespace EInvoiceQuickBooks.Services
 
         #region Process
 
-        public async Task<string> ProcessMethod(Invoice originalInvoice, string invoiceId, int isResend)
+        public async Task<string> ProcessMethod(Invoice originalInvoice, string invoiceId, int isResend, string realmId)
         {
             try
             {
@@ -468,7 +469,7 @@ namespace EInvoiceQuickBooks.Services
                 {
                     var invoiceService = scope.ServiceProvider.GetRequiredService<InvoiceService>();
 
-                    var base64PdfString = await invoiceService.GetInvoicePDFAsync(invoiceId);
+                    var base64PdfString = await invoiceService.GetInvoicePDFAsync(invoiceId, realmId);
 
                     var originalEmail = originalInvoice.CustomField.Where(c => c.DefinitionId == "1" && c.AnyIntuitObject != null).Select(c => c.AnyIntuitObject.ToString()).FirstOrDefault();
                     var requestProgress = new ProcessRequest()
@@ -477,7 +478,7 @@ namespace EInvoiceQuickBooks.Services
                         emailAddress = originalEmail == null ? dummyEmail : originalEmail,
                     };
 
-                    var tokenResp = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmeId);
+                    var tokenResp = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
                     string resProcessInvoice = "";
                     if (isResend == 1)
                     {

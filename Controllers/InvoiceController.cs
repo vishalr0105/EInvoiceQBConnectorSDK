@@ -19,6 +19,13 @@ namespace EInvoiceQuickBooks.Controllers
             _invoiceService = invoiceSevice;
         }
 
+        [HttpGet("GetCompanyInfo")]
+        public async Task<object> GetCompanyInfo(string realmId)
+        {
+            var res = await _invoiceService.GetCompanyInfo(realmId);
+            return res;
+        }
+
         #region short url
         [NonAction]
         [HttpPost("shorten")]
