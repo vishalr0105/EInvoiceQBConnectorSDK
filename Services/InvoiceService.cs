@@ -547,27 +547,44 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
-        public async Task<string> GetSubmitDocumentDetails(string uuid, string token)
-        {
-            try
-            {
-                var client = new HttpClient();
+        #region GetSubmitDocumentDetails comment
 
-                var requestUrl = $"https://dev.advintek.com.my:743/api/LightWeight/GetSubmitDocumentDetails?uuid={uuid}";
+        //public async Task<string> GetSubmitDocumentDetails(string uuid, string token)
+        //{
+        //    try
+        //    {
+        //        string uuid1 = "";
+        //        using (JsonDocument doc = JsonDocument.Parse(uuid))
+        //        {
+        //            // Navigate to the 'uuid' field within the 'data' object
+        //            uuid1 = doc.RootElement
+        //                             .GetProperty("data")
+        //                             .GetProperty("uuid")
+        //                             .GetString();
 
-                var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
-                request.Headers.Add("accept", "*/*");
-                request.Headers.Add("Authorization", $"Bearer {token}");
+        //            // Output the extracted UUID
+        //            Console.WriteLine(uuid1);
+        //        }
 
-                var response = await client.SendAsync(request);
+        //        var client = new HttpClient();
 
-                return await response.Content.ReadAsStringAsync();
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
+        //        var requestUrl = $"https://dev.advintek.com.my:743/api/LightWeight/GetSubmitDocumentDetails?uuid={uuid1}";
+
+        //        var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+        //        request.Headers.Add("accept", "*/*");
+        //        request.Headers.Add("Authorization", $"Bearer {token}");
+
+        //        var response = await client.SendAsync(request);
+
+        //        return await response.Content.ReadAsStringAsync();
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        throw ex;
+        //    }
+        //}
+
+        #endregion
 
         public async Task<string> ProcessInvoiceMethod(ProcessRequest input, string token)
         {

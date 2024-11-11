@@ -482,7 +482,6 @@ namespace EInvoiceQuickBooks.Services
                     {
                         var company = await invoiceService.GetCompanyInfo(realmId);
                         var req = GetBaseInvoiceRequest(originalInvoice, company);
-                        //var json = JsonConvert.SerializeObject(req, Formatting.Indented);
                         string submitResp;
                         var count = 0;
                         do
@@ -513,7 +512,7 @@ namespace EInvoiceQuickBooks.Services
                             return $"A LongId was not found for this UUID";
                         }
 
-                        var getSubmitDocDetailsResp = await invoiceService.GetSubmitDocumentDetails(submitResp, tokenResp);
+                        //var getSubmitDocDetailsResp = await invoiceService.GetSubmitDocumentDetails(submitResp, tokenResp);
                         resProcessInvoice = await invoiceService.ProcessInvoiceMethod(requestProgress, tokenResp);
                     }
 
@@ -557,7 +556,7 @@ namespace EInvoiceQuickBooks.Services
                 SellerCategory = "BRN",
                 SellerBusinessRegistrationNumber = "201901029037",
                 SellerSSTRegistrationNumber = "NA",
-                SellerEmail = !string.IsNullOrEmpty(company.Email.Address) ? company.Email.Address : "info@advintek.com.my",
+                SellerEmail = company.Email?.Address ?? "info@advintek.com.my",
                 SellerMalaysiaStandardIndustrialClassificationCode = "30910",
                 SellerContactNumber = !string.IsNullOrEmpty(company.Mobile?.FreeFormNumber) ? company.Mobile.FreeFormNumber 
                                     : !string.IsNullOrEmpty(company.PrimaryPhone?.FreeFormNumber) ? company.PrimaryPhone.FreeFormNumber
@@ -565,13 +564,13 @@ namespace EInvoiceQuickBooks.Services
                 SellerAddressLine0 = company.LegalAddr?.Line1,
                 SellerAddressLine1 = company.LegalAddr?.Line2,
                 SellerAddressLine2 = company.LegalAddr?.Line3,
-                SellerPostalZone = !string.IsNullOrEmpty(company.LegalAddr.PostalCode) ? company.LegalAddr.PostalCode : "50100",
-                SellerCityName = !string.IsNullOrEmpty(company.LegalAddr.City) ? company.LegalAddr.City : "Kuala Lumpur",
-                SellerState =!string.IsNullOrEmpty( company.LegalAddr.CountrySubDivisionCode) ? company.LegalAddr.CountrySubDivisionCode : " ",    //"01",
-                SellerCountry = !string.IsNullOrEmpty(company.Country) ? company.Country : "MYS",
+                SellerPostalZone = company.LegalAddr?.PostalCode ?? "50100",
+                SellerCityName = company.LegalAddr?.City ?? "Kuala Lumpur",
+                SellerState = "14", //company.LegalAddr?.CountrySubDivisionCode ?? " ",
+                SellerCountry = "MYS",//company.Country ?? "MYS",
                 SellerBusinessActivityDescription = "MEDICAL LABORATORIES",
                 SellerMSIC = "46201",
-                BuyerName = invoice.CustomerRef.Value,  //"Nityo Infotech Services Sdn. Bhd.",
+                BuyerName = invoice.CustomerRef.Value,
                 BuyerTIN = "C20307408040",
                 BuyerCategory = "BRN",
                 BuyerBusinessRegistrationNumber = "200601028904",
@@ -580,20 +579,20 @@ namespace EInvoiceQuickBooks.Services
                 BuyerEmail = invoice.CustomField.Where(c => c.DefinitionId == "1" && c.AnyIntuitObject != null).Select(c => c.AnyIntuitObject.ToString()).FirstOrDefault() ?? dummyEmail,
                 BuyerContactNumber = "16097995959",
                 BuyerAddressLine0 = !string.IsNullOrEmpty(invoice.BillAddr.Line1) ? invoice.BillAddr.Line1 : "Line 1",
-                BuyerAddressLine1 = !string.IsNullOrEmpty(invoice.BillAddr.Line2) ? invoice.BillAddr.Line2 : null ,  //"Jalan Stesen Sentral 2,",
-                BuyerAddressLine2 = !string.IsNullOrEmpty(invoice.BillAddr.Line3) ? invoice.BillAddr.Line3 : null,   //"Kuala Lumpur Sentral,",
-                BuyerPostalZone = !string.IsNullOrEmpty(invoice.BillAddr.PostalCode) ? invoice.BillAddr.PostalCode : " ",   //"50470",
-                BuyerCityName = !string.IsNullOrEmpty(invoice.BillAddr.City) ? invoice.BillAddr.City : "Kuala Lumpur",
-                BuyerState = !string.IsNullOrEmpty(invoice.BillAddr.CountrySubDivisionCode) ? invoice.BillAddr.CountrySubDivisionCode : "14",
-                BuyerCountry = !string.IsNullOrEmpty(invoice.BillAddr.Country) ? invoice.BillAddr.Country : "MYS",
+                BuyerAddressLine1 = invoice.BillAddr?.Line2,
+                BuyerAddressLine2 = invoice.BillAddr?.Line3,
+                BuyerPostalZone = invoice.BillAddr?.PostalCode ?? " ",
+                BuyerCityName = invoice.BillAddr?.City ?? "Kuala Lumpur",
+                BuyerState =  "14",//invoice.BillAddr?.CountrySubDivisionCode ??
+                BuyerCountry =  "MYS",//invoice.BillAddr?.Country ??
                 SumOfInvoiceLineNetAmount = invoice.TotalAmt.ToString(),
                 SumOfAllowancesOnDocumentLevel = "0.00",
                 TotalFeeOrChargeAmount = "0.00",
-                TotalExcludingTax = String.IsNullOrEmpty(invoice.TotalAmt.ToString()) ? "0.0" : invoice.TotalAmt.ToString(),
-                TotalIncludingTax = String.IsNullOrEmpty(invoice.TotalAmt.ToString()) ? "0.0" : invoice.TotalAmt.ToString(),
+                TotalExcludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0",
+                TotalIncludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0",
                 RoundingAmount = "0.02",
                 PaidAmount = "0.00",
-                TotalPayableAmount = String.IsNullOrEmpty(invoice.TotalAmt.ToString()) ? "0.0" : invoice.TotalAmt.ToString(),
+                TotalPayableAmount = invoice.TotalAmt.ToString("0.0") ?? "0.0",
                 ReferenceNumberOfCustomsFormNo1ID = null,
                 ReferenceNumberOfCustomsFormNo1DocumentType = null,
                 Incoterms = "DDP",
@@ -608,7 +607,7 @@ namespace EInvoiceQuickBooks.Services
                 DetailsOfOtherChargesChargeIndicator = null,
                 DetailsOfOtherChargesAmount = null,
                 DetailsOfOtherChargesAllowanceChargeReason = null,
-                TotalNetAmount = String.IsNullOrEmpty(invoice.TotalAmt.ToString()) ? "0.0" : invoice.TotalAmt.ToString(),
+                TotalNetAmount = invoice.TotalAmt.ToString("0.0") ?? "0.0",
                 InvoiceLine = GetLines(invoice),
                 isPDF = false,
                 OutputFormat = "json",
@@ -647,24 +646,24 @@ namespace EInvoiceQuickBooks.Services
                     LineId = String.IsNullOrEmpty(line.Id) ? i.ToString() : line.Id,
                     ClassificationClass = "CLASS",
                     ClassificationCode = "022",
-                    ProductID = String.IsNullOrEmpty(line.DetailType.GetStringValue()) ? "Latex" : line.DetailType.GetStringValue(),
+                    ProductID = string.IsNullOrEmpty(line.DetailType.GetStringValue()) ? "Latex" : line.DetailType.GetStringValue(),
                     Description = String.IsNullOrEmpty(line.Description) ? "description" : line.Description,
                     ProductTariffCode = "4001.10.00",
                     ProductTariffClass = "PTC",
                     Country = "THA",
-                    UnitPrice = String.IsNullOrEmpty(line.Amount.ToString()) ? "0" : line.Amount.ToString(),
+                    UnitPrice = line.Amount.ToString() ?? "0",
                     Quantity = "0",
                     Measurement = "WE",
-                    Subtotal = String.IsNullOrEmpty(invoice.TotalAmt.ToString()) ? "0" : invoice.TotalAmt.ToString(),
+                    Subtotal = invoice.TotalAmt.ToString() ?? "0",
                     SSTTaxCategory = null,
-                    TaxType = invoice.TxnTaxDetail?.TxnTaxCodeRef?.Value ?? "NA",
+                    TaxType =  "06",//invoice.TxnTaxDetail?.TxnTaxCodeRef?.Value ??
                     TaxRate = "0.0",
-                    TaxAmount = String.IsNullOrEmpty(invoice.TxnTaxDetail?.TotalTax.ToString()) ? "0" : invoice.TxnTaxDetail?.TotalTax.ToString(),
+                    TaxAmount = invoice.TxnTaxDetail?.TotalTax.ToString() ?? "0",
                     DetailsOfTaxExemption = null,
                     AmountExemptedFromTax = null,
-                    TotalExcludingTax = String.IsNullOrEmpty(invoice.TotalAmt.ToString()) ? "0" : invoice.TotalAmt.ToString(),
-                    InvoiceLineNetAmount = String.IsNullOrEmpty(invoice.TotalAmt.ToString()) ? "0" : invoice.TotalAmt.ToString(),
-                    NettAmount = String.IsNullOrEmpty(invoice.TotalAmt.ToString()) ? "0" : invoice.TotalAmt.ToString(),
+                    TotalExcludingTax = invoice.TotalAmt.ToString("0.00"),
+                    InvoiceLineNetAmount = invoice.TotalAmt.ToString("0.00"),
+                    NettAmount = invoice.TotalAmt.ToString("0.00"),
                     TaxCategorySchemeID = "UN/ECE 5153",
                     TaxCategorySchemeAgencyID = "6",
                     TaxCategorySchemeAgencyCode = "OTH"
