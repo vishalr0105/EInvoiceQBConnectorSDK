@@ -37,16 +37,22 @@ namespace EInvoiceQuickBooks.Services
             lhdnBaseUrl = _configuration["LHDNBaseUrl"];
         }
 
+        #region QB API's
+
+        // Get Invoice from QB (SDK)
         public async Task<Invoice> GetInvoiceAsync(string invoiceId, string realmId)
         {
             try
             {
                 var accessToken = await GetAccessToken();
+
                 var oauthValidator = new OAuth2RequestValidator(accessToken);
                 var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
                 var dataService = new DataService(serviceContext);
+
                 serviceContext.IppConfiguration.Message.Request.SerializationFormat = Intuit.Ipp.Core.Configuration.SerializationFormat.Json;
                 serviceContext.IppConfiguration.Message.Response.SerializationFormat = Intuit.Ipp.Core.Configuration.SerializationFormat.Json;
+
                 var invoice = dataService.FindById(new Invoice { Id = invoiceId });
 
                 return invoice;
@@ -57,11 +63,13 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
+        // Get PDF Invoice from QB (SDK)
         public async Task<object> GetInvoicePDFAsync(string invoiceId, string realmId)
         {
             try
             {
                 var accessToken = await GetAccessToken();
+
                 var oauthValidator = new OAuth2RequestValidator(accessToken);
                 var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
                 var dataService = new DataService(serviceContext);
@@ -77,11 +85,13 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
+        // Update Invoice in QB (SDK)
         public async Task<Invoice> UpdateInvoice(Invoice invoiceToUpdate, string realmId)
         {
             try
             {
                 var accessToken = await GetAccessToken();
+
                 var oauthValidator = new OAuth2RequestValidator(accessToken);
                 var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
                 var dataService = new DataService(serviceContext);
@@ -99,12 +109,15 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
+        // Either Create or Update Invoice in QB using jsonbody (No SDK)
         public async Task<CreateOrUpdateInvoiceResponse> CreateOrUpdateInvoice(object invoiceUpdate, string realmId)
         {
             try
             {
-                var content = new StringContent(invoiceUpdate.ToString(), Encoding.UTF8, "application/json");
                 var accessToken = await GetAccessToken();
+
+                var content = new StringContent(invoiceUpdate.ToString(), Encoding.UTF8, "application/json");
+
                 using (var httpClient = new HttpClient())
                 {
                     httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
@@ -112,6 +125,7 @@ namespace EInvoiceQuickBooks.Services
 
                     var response = await httpClient.PostAsync($"{_qBooksConfig.BaseUrl}/v3/company/{realmId}/invoice?minorversion=73", content);
                     var responseBody = await response.Content.ReadAsStringAsync();
+
                     if (response.IsSuccessStatusCode)
                     {
                         var responseJson = JObject.Parse(responseBody);
@@ -141,12 +155,13 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
-        //Explicitly Send the Invoice Email
+        // Explicitly Send the Invoice Email (No SDK)
         public async Task<string> SendInvoiceEmailAsync(string invoiceId, string realmId)
         {
             try
             {
                 var accessToken = await GetAccessToken();
+
                 HttpClient client = new HttpClient();
 
                 var url = $"{_qBooksConfig.BaseUrl}/v3/company/{realmId}/invoice/{invoiceId}/send";
@@ -175,9 +190,59 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
+        #endregion
+
+        #region QB Access/Refresh Token
+
+        // Get Access Token from QB
+        public async Task<string> GetAccessToken()
+        {
+            var oauth2Client = new OAuth2Client(clientId, clientKey, "https://developer.intuit.com/v2/OAuth2Playground/RedirectUrl", "production");
+
+            var previousRefreshToken = refreshToken;
+            var tokenResp = await oauth2Client.RefreshTokenAsync(previousRefreshToken);
+            var data = tokenResp;
+
+            if (!String.IsNullOrEmpty(data.Error) || String.IsNullOrEmpty(data.RefreshToken) || String.IsNullOrEmpty(data.AccessToken))
+            {
+                throw new Exception("Refresh token failed - " + data.Error);
+            }
+
+            // If we've got a new refresh_token store it in the file
+            if (previousRefreshToken != data.RefreshToken)
+            {
+                Console.WriteLine("Writing new refresh token : " + data.RefreshToken);
+                WriteNewRefreshTokenToWhereItIsStored(data.RefreshToken);
+            }
+            return data.AccessToken;
+        }
+
+        // Update Refresh Token in Configuration file
+        private string WriteNewRefreshTokenToWhereItIsStored(string newRefreshToken)
+        {
+            string _filePath = Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json");
+            var section = "QuickBooksSettings";
+            var key = "RefreshToken";
+            var newValue = newRefreshToken;
+
+            var json = File.ReadAllText(_filePath);
+            dynamic jsonObj = JsonConvert.DeserializeObject(json);
+            jsonObj[section][key] = newValue;
+            string output = JsonConvert.SerializeObject(jsonObj, Formatting.Indented);
+            File.WriteAllText(_filePath, output);
+
+            return "success";
+        }
+
+        #endregion
+
+        #region Company Details
+
+        // Get company info from realmId
         public async Task<Company> GetCompanyInfo(string realmId)
         {
             var accessToken = await GetAccessToken();
+
             var oauthValidator = new OAuth2RequestValidator(accessToken);
             var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
             var dataService = new DataService(serviceContext);
@@ -189,8 +254,67 @@ namespace EInvoiceQuickBooks.Services
             return company;
         }
 
+        #endregion
+
+        #region Get Enum Values from QB
+
+        // Get Detail type for Line item
+        private LineDetailTypeEnum GetDetailTypeEnum(string detailType)
+        {
+            return detailType switch
+            {
+                "0" => LineDetailTypeEnum.PaymentLineDetail,
+                "1" => LineDetailTypeEnum.DiscountLineDetail,
+                "2" => LineDetailTypeEnum.TaxLineDetail,
+                "3" => LineDetailTypeEnum.SalesItemLineDetail,
+                "4" => LineDetailTypeEnum.ItemBasedExpenseLineDetail,
+                "5" => LineDetailTypeEnum.AccountBasedExpenseLineDetail,
+                "6" => LineDetailTypeEnum.DepositLineDetail,
+                "7" => LineDetailTypeEnum.PurchaseOrderItemLineDetail,
+                "8" => LineDetailTypeEnum.ItemReceiptLineDetail,
+                "9" => LineDetailTypeEnum.JournalEntryLineDetail,
+                "10" => LineDetailTypeEnum.GroupLineDetail,
+                "11" => LineDetailTypeEnum.DescriptionOnly,
+                "12" => LineDetailTypeEnum.SubTotalLineDetail,
+                "13" => LineDetailTypeEnum.SalesOrderItemLineDetail,
+                "14" => LineDetailTypeEnum.TDSLineDetail,
+                "15" => LineDetailTypeEnum.ReimburseLineDetail,
+                "16" => LineDetailTypeEnum.ItemAdjustmentLineDetail,
+                _ => throw new ArgumentOutOfRangeException($"Unknown DetailType: {detailType}"),
+            };
+        }
+
+        // Get Custom field type (e.g. StringType)
+        private CustomFieldTypeEnum GetCustomFieldType(int type)
+        {
+            return type switch
+            {
+                0 => CustomFieldTypeEnum.StringType,
+                1 => CustomFieldTypeEnum.BooleanType,
+                2 => CustomFieldTypeEnum.NumberType,
+                3 => CustomFieldTypeEnum.DateType,
+                _ => throw new ArgumentOutOfRangeException($"Unknown DetailType: {type}"),
+            };
+        }
+
+        // Get Custom field key (e.g. StringValue)
+        private static string GetCustomFieldObjectKey(int typeValue)
+        {
+            return typeValue switch
+            {
+                0 => "StringValue",
+                1 => "BooleanValue",
+                2 => "NumberValue",
+                3 => "DateValue",
+                _ => "StringValue",
+            };
+        }
+
+        #endregion
+
         #region LHDN API's calling
 
+        // Get Access Token for LHDN API's
         public async Task<string> GetQuickBooksLoginDataAsync(string clientID, string clientKey, string realmId)
         {
             try
@@ -205,8 +329,6 @@ namespace EInvoiceQuickBooks.Services
                 request.Headers.Add("accept", "*/*");
 
                 var response = await _httpClient.SendAsync(request);
-
-                response.EnsureSuccessStatusCode();
 
                 var content = await response.Content.ReadAsStringAsync();
 
@@ -226,6 +348,7 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
+        // Check Invoice already exists in DB
         public async Task<int> CheckAlreadyExists(string invoiceId, string token)
         {
             try
@@ -256,6 +379,7 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
+        // Get Invoice from DB
         public async Task<string> GetDBInvoice(string invoiceId, string token, int isCreateNew, string emailValue)
         {
             try
@@ -434,55 +558,7 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
-        private LineDetailTypeEnum GetDetailTypeEnum(string detailType)
-        {
-            return detailType switch
-            {
-                "0" => LineDetailTypeEnum.PaymentLineDetail,
-                "1" => LineDetailTypeEnum.DiscountLineDetail,
-                "2" => LineDetailTypeEnum.TaxLineDetail,
-                "3" => LineDetailTypeEnum.SalesItemLineDetail,
-                "4" => LineDetailTypeEnum.ItemBasedExpenseLineDetail,
-                "5" => LineDetailTypeEnum.AccountBasedExpenseLineDetail,
-                "6" => LineDetailTypeEnum.DepositLineDetail,
-                "7" => LineDetailTypeEnum.PurchaseOrderItemLineDetail,
-                "8" => LineDetailTypeEnum.ItemReceiptLineDetail,
-                "9" => LineDetailTypeEnum.JournalEntryLineDetail,
-                "10" => LineDetailTypeEnum.GroupLineDetail,
-                "11" => LineDetailTypeEnum.DescriptionOnly,
-                "12" => LineDetailTypeEnum.SubTotalLineDetail,
-                "13" => LineDetailTypeEnum.SalesOrderItemLineDetail,
-                "14" => LineDetailTypeEnum.TDSLineDetail,
-                "15" => LineDetailTypeEnum.ReimburseLineDetail,
-                "16" => LineDetailTypeEnum.ItemAdjustmentLineDetail,
-                _ => throw new ArgumentOutOfRangeException($"Unknown DetailType: {detailType}"),
-            };
-        }
-
-        private CustomFieldTypeEnum GetCustomFieldType(int type)
-        {
-            return type switch
-            {
-                0 => CustomFieldTypeEnum.StringType,
-                1 => CustomFieldTypeEnum.BooleanType,
-                2 => CustomFieldTypeEnum.NumberType,
-                3 => CustomFieldTypeEnum.DateType,
-                _ => throw new ArgumentOutOfRangeException($"Unknown DetailType: {type}"),
-            };
-        }
-
-        private static string GetCustomFieldObjectKey(int typeValue)
-        {
-            return typeValue switch
-            {
-                0 => "StringValue",
-                1 => "BooleanValue",
-                2 => "NumberValue",
-                3 => "DateValue",
-                _ => "StringValue",
-            };
-        }
-
+        // Submit Invoice
         public async Task<string> SubmitInvoiceAsync(InvoiceRequest invoiceRequest, string token)
         {
             try
@@ -534,6 +610,7 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
+        // Sent Invoice PDF Email
         public async Task<string> ProcessInvoiceMethod(ProcessRequest input, string token)
         {
             try
@@ -559,43 +636,6 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
-        public async Task<string> GetAccessToken()
-        {
-            var oauth2Client = new OAuth2Client(clientId, clientKey, "https://developer.intuit.com/v2/OAuth2Playground/RedirectUrl", "production");
-
-            var previousRefreshToken = refreshToken;
-            var tokenResp = await oauth2Client.RefreshTokenAsync(previousRefreshToken);
-            var data = tokenResp;
-
-            if (!String.IsNullOrEmpty(data.Error) || String.IsNullOrEmpty(data.RefreshToken) || String.IsNullOrEmpty(data.AccessToken))
-            {
-                throw new Exception("Refresh token failed - " + data.Error);
-            }
-
-            // If we've got a new refresh_token store it in the file
-            if (previousRefreshToken != data.RefreshToken)
-            {
-                Console.WriteLine("Writing new refresh token : " + data.RefreshToken);
-                WriteNewRefreshTokenToWhereItIsStored(data.RefreshToken);
-            }
-            return data.AccessToken;
-        }
-
-        private string WriteNewRefreshTokenToWhereItIsStored(string newRefreshToken)
-        {
-            string _filePath = Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json");
-            var section = "QuickBooksSettings";
-            var key = "RefreshToken";
-            var newValue = newRefreshToken;
-
-            var json = File.ReadAllText(_filePath);
-            dynamic jsonObj = JsonConvert.DeserializeObject(json);
-            jsonObj[section][key] = newValue;
-            string output = JsonConvert.SerializeObject(jsonObj, Formatting.Indented);
-            File.WriteAllText(_filePath, output);
-
-            return "success";
-        }
         #endregion
     }
 }

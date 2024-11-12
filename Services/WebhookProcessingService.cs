@@ -51,6 +51,7 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
+        // Recieve webhook event from queue
         private async System.Threading.Tasks.Task ProcessInvoiceEmailedEventAsync(string payload)
         {
             // Create a new scope to resolve scoped services
@@ -469,6 +470,7 @@ namespace EInvoiceQuickBooks.Services
 
                     var tokenResp = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
                     string resProcessInvoice = "";
+
                     if (isResend == 1)
                     {
                         resProcessInvoice = await invoiceService.ProcessInvoiceMethod(requestProgress, tokenResp);
@@ -483,6 +485,7 @@ namespace EInvoiceQuickBooks.Services
                         var req = GetBaseInvoiceRequest(originalInvoice, company);
                         string submitResp;
                         var count = 0;
+
                         do
                         {
                             submitResp = await invoiceService.SubmitInvoiceAsync(req, tokenResp);
@@ -530,7 +533,7 @@ namespace EInvoiceQuickBooks.Services
 
         #endregion
 
-        #region LHDN eInvoice Create Request formation
+        #region LHDN eInvoice Create Request-Body Formation
 
         private InvoiceRequest GetBaseInvoiceRequest(Invoice invoice, Company company)
         {
