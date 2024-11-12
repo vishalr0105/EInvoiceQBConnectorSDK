@@ -5,6 +5,7 @@ using Intuit.Ipp.WebhooksService;
 using Newtonsoft.Json;
 using Intuit.Ipp.OAuth2PlatformClient;
 using Intuit.Ipp.Diagnostics;
+using Serilog;
 
 namespace EInvoiceQuickBooks.Services
 {
@@ -46,7 +47,7 @@ namespace EInvoiceQuickBooks.Services
                 }
                 catch (Exception ex)
                 {
-                    LogError($"An error occurred while processing webhook: {ex.Message}");
+                    Log.Information($"An error occurred while processing webhook: {ex.Message}");
                 }
             }
         }
@@ -69,7 +70,7 @@ namespace EInvoiceQuickBooks.Services
                 var syncToken = "";
 
                 Console.WriteLine($"Processing {operation} operation on invoice with id: {invoiceId}");
-                LogInfo($"Processing {operation} operation on invoice with id: {invoiceId}");
+                Log.Information($"Processing {operation} operation on invoice with id: {invoiceId}");
 
                 string token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
 
@@ -146,17 +147,17 @@ namespace EInvoiceQuickBooks.Services
                                 {
                                     if (res == "success")
                                     {
-                                        LogInfo($"Invoice Resent successfully - {invoiceId}");
+                                        Log.Information($"Invoice Resent successfully - {invoiceId}");
                                         Console.WriteLine($"Invoice Resent successfully - {invoiceId}");
                                     }
                                     else if (res == "failure")
                                     {
-                                        LogInfo($"Invoice Resent failure - {invoiceId}");
+                                        Log.Information($"Invoice Resent failure - {invoiceId}");
                                         Console.WriteLine($"Invoice Resent failure - {invoiceId}");
                                     }
                                     else
                                     {
-                                        LogInfo($"{res} - Invoice - {invoiceId}");
+                                        Log.Information($"{res} - Invoice - {invoiceId}");
                                         Console.WriteLine($"{res} - Invoice - {invoiceId}");
                                     }
                                 }
@@ -237,12 +238,12 @@ namespace EInvoiceQuickBooks.Services
                                     {
                                         if (res == "success")
                                         {
-                                            LogInfo($"Invoice Resent successfully - {invoiceId}");
+                                            Log.Information($"Invoice Resent successfully - {invoiceId}");
                                             Console.WriteLine($"Invoice Resent successfully - {invoiceId}");
                                         }
                                         else if (res == "failure")
                                         {
-                                            LogInfo($"Invoice Resent failure - {invoiceId}");
+                                            Log.Information($"Invoice Resent failure - {invoiceId}");
                                             Console.WriteLine($"Invoice Resent failure - {invoiceId}");
                                         }
                                     }
@@ -319,7 +320,7 @@ namespace EInvoiceQuickBooks.Services
 
                                     //Log success
                                     Console.WriteLine($"Cannot Update invoice once sent to Tax Office. Reverted changes back in Invoice. And Sent Email.");
-                                    LogInfo($"Cannot Update invoice once sent to Tax Office. Reverted changes back in Invoice. And Sent Email");
+                                    Log.Information($"Cannot Update invoice once sent to Tax Office. Reverted changes back in Invoice. And Sent Email");
                                 }
                             }
                         }
@@ -327,6 +328,7 @@ namespace EInvoiceQuickBooks.Services
                 }
                 else if (operation == "Delete")
                 {
+                    token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
                     var checkExists = await invoiceService.CheckAlreadyExists(invoiceId, token);
 
                     if (checkExists == 1)
@@ -342,19 +344,19 @@ namespace EInvoiceQuickBooks.Services
                                 var sendEmailRes = await invoiceService.SendInvoiceEmailAsync(createRes.Data.Id, realmId);
 
                                 Console.WriteLine($"Cannot Delete invoice once sent to Tax Office. Created back Invoice - {createRes.Data.Id}.");
-                                LogInfo($"Cannot Delete invoice once sent to Tax Office. Created back Invoice - {createRes.Data.Id}.");
+                                Log.Information($"Cannot Delete invoice once sent to Tax Office. Created back Invoice - {createRes.Data.Id}.");
                             }
                         }
                         catch (Exception ex)
                         {
                             Console.WriteLine($"Exception in Delete-Create-Back Invoice - {invoiceId}.");
-                            LogError($"Exception in Delete-Create-Back Invoice - {invoiceId}.");
+                            Log.Information($"Exception in Delete-Create-Back Invoice - {invoiceId}.");
                         }
                     }
                     else
                     {
                         Console.WriteLine($"Deleted invoice successfully, as it was not sent to Tax Office.");
-                        LogInfo($"Deleted invoice successfully, as it was not sent to Tax Office.");
+                        Log.Information($"Deleted invoice successfully, as it was not sent to Tax Office.");
                     }
                 }
                 else if (operation == "Create")
@@ -397,7 +399,7 @@ namespace EInvoiceQuickBooks.Services
                     }
 
                     Console.WriteLine($"Updated Email-field for newly created invoice - {invoiceId}.");
-                    LogInfo($"Updated Email-field for newly created invoice - {invoiceId}.");
+                    Log.Information($"Updated Email-field for newly created invoice - {invoiceId}.");
                 }
                 else if (operation == "Update")
                 {
@@ -439,13 +441,13 @@ namespace EInvoiceQuickBooks.Services
                             var resUpdateEmail = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
 
                             Console.WriteLine($"Found an attempt to update Email-field, Reverted back for Invoice - {invoiceId}");
-                            LogInfo($"Found an attempt to update Email-field, Reverted back for Invoice - {invoiceId}");
+                            Log.Information($"Found an attempt to update Email-field, Reverted back for Invoice - {invoiceId}");
                         }
                     }
                 }
 
                 Console.WriteLine($"Invoice {invoiceId} processed successfully for operation {operation}.");
-                LogInfo($"Invoice {invoiceId} processed successfully for operation {operation}.");
+                Log.Information($"Invoice {invoiceId} processed successfully for operation {operation}.");
             }
         }
 
@@ -689,28 +691,6 @@ namespace EInvoiceQuickBooks.Services
             string jsonString = JsonConvert.SerializeObject(result, Formatting.None);
 
             return jsonString;
-        }
-
-        #endregion
-
-        #region Logging
-
-        private void LogInfo(string message)
-        {
-            string logFilePath = @"D:\Logs\WebHookServiceLogs.txt";
-            using (StreamWriter writer = new StreamWriter(logFilePath, true))
-            {
-                writer.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - INFO - {message}");
-            }
-        }
-
-        private void LogError(string message)
-        {
-            string logFilePath = @"D:\Logs\WebHookServiceLogs.txt";
-            using (StreamWriter writer = new StreamWriter(logFilePath, true))
-            {
-                writer.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - ERROR - {message}");
-            }
         }
 
         #endregion

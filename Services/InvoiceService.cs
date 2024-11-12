@@ -13,6 +13,7 @@ using Newtonsoft.Json.Linq;
 using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
 using Intuit.Ipp.Diagnostics;
+using Serilog;
 
 namespace EInvoiceQuickBooks.Services
 {
@@ -59,6 +60,8 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
+                var jsonEx = JsonConvert.SerializeObject(ex);
+                Log.Information($"{jsonEx}");
                 throw ex;
             }
         }
@@ -81,6 +84,8 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
+                var jsonEx = JsonConvert.SerializeObject(ex);
+                Log.Information($"{jsonEx}");
                 return ex;
             }
         }
@@ -105,6 +110,8 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
+                var jsonEx = JsonConvert.SerializeObject(ex);
+                Log.Information($"{jsonEx}");
                 throw ex;
             }
         }
@@ -151,6 +158,8 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
+                var jsonEx = JsonConvert.SerializeObject(ex);
+                Log.Information($"{jsonEx}");
                 return new CreateOrUpdateInvoiceResponse() { Status = "failure", Error = ex.Message, Data = null };
             }
         }
@@ -185,6 +194,8 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
+                var jsonEx = JsonConvert.SerializeObject(ex);
+                Log.Information($"{jsonEx}");
                 Console.WriteLine($"General error: {ex.Message}");
                 return "failure";
             }
@@ -241,17 +252,26 @@ namespace EInvoiceQuickBooks.Services
         // Get company info from realmId
         public async Task<Company> GetCompanyInfo(string realmId)
         {
-            var accessToken = await GetAccessToken();
+            try
+            {
+                var accessToken = await GetAccessToken();
 
-            var oauthValidator = new OAuth2RequestValidator(accessToken);
-            var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
-            var dataService = new DataService(serviceContext);
+                var oauthValidator = new OAuth2RequestValidator(accessToken);
+                var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
+                var dataService = new DataService(serviceContext);
 
-            serviceContext.IppConfiguration.Message.Request.SerializationFormat = Intuit.Ipp.Core.Configuration.SerializationFormat.Json;
-            serviceContext.IppConfiguration.Message.Response.SerializationFormat = Intuit.Ipp.Core.Configuration.SerializationFormat.Json;
+                serviceContext.IppConfiguration.Message.Request.SerializationFormat = Intuit.Ipp.Core.Configuration.SerializationFormat.Json;
+                serviceContext.IppConfiguration.Message.Response.SerializationFormat = Intuit.Ipp.Core.Configuration.SerializationFormat.Json;
 
-            var company = dataService.FindById(new Company() { Id = realmId });
-            return company;
+                var company = dataService.FindById(new Company() { Id = realmId });
+                return company;
+            }
+            catch (Exception ex)
+            {
+                var jsonEx = JsonConvert.SerializeObject(ex);
+                Log.Information($"{jsonEx}");
+                throw;
+            }
         }
 
         #endregion
@@ -344,6 +364,7 @@ namespace EInvoiceQuickBooks.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"An error occurred: {ex.Message}");
+                Log.Information($"An error occurred: {ex.Message}");
                 return string.Empty;
             }
         }
@@ -601,6 +622,7 @@ namespace EInvoiceQuickBooks.Services
 
                     var errorResponse = await response.Content.ReadAsStringAsync();
                     Console.WriteLine($"Error Response: {errorResponse}");
+                    Log.Information($"Error Response: {errorResponse}");
                     return errorResponse;
                 }
             }
@@ -632,6 +654,8 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
+                var jsonEx = JsonConvert.SerializeObject(ex);
+                Log.Information($"{jsonEx}");
                 throw ex;
             }
         }

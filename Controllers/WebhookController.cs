@@ -1,6 +1,8 @@
 ﻿using EInvoiceQuickBooks.Services;
 using Intuit.Ipp.WebhooksService;
 using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json;
+using Serilog;
 using System.Text.Json;
 
 namespace EInvoiceQuickBooks.Controllers
@@ -9,7 +11,7 @@ namespace EInvoiceQuickBooks.Controllers
     [ApiController]
     public class WebhookController : ControllerBase
     {
-        string logFilePath = "D:\\Logs\\WebHookServiceLogs.txt";
+        //string logFilePath = @"C:\QBLogs\WebHookServiceLogs.txt";
         private readonly ILogger<WebhookController> _logger;
         private readonly IQueueService _webhookProcessingService;
 
@@ -17,10 +19,10 @@ namespace EInvoiceQuickBooks.Controllers
         {
             _webhookProcessingService = webhookProcessingService;
             _logger = logger;
-            using (StreamWriter writer = new StreamWriter(logFilePath, true))
-            {
-                writer.WriteLine($"\n{DateTime.Now:yyyy-MM-dd HH:mm:ss} - In Webhook constructor");
-            }
+            //using (StreamWriter writer = new StreamWriter(logFilePath, true))
+            //{
+            //    writer.WriteLine($"\n{DateTime.Now:yyyy-MM-dd HH:mm:ss} - In Webhook constructor");
+            //}
         }
 
         //working
@@ -29,11 +31,14 @@ namespace EInvoiceQuickBooks.Controllers
         {
             try
             {
+                Log.Information("ReceiveWebhook called");
+
                 var payloadString = payload.GetRawText();
                 var intuitSignature = Request.Headers["intuit-signature"].ToString();
 
                 if (string.IsNullOrEmpty(intuitSignature))
                 {
+                    Log.Information("Missing Intuit signature.");
                     return BadRequest("Missing Intuit signature.");
                 }
 
@@ -42,6 +47,7 @@ namespace EInvoiceQuickBooks.Controllers
 
                 if (test == false)
                 {
+                    Log.Information("Invalid signature.");
                     return Unauthorized("Invalid signature.");
                 }
 
@@ -61,6 +67,9 @@ namespace EInvoiceQuickBooks.Controllers
             }
             catch (Exception ex)
             {
+                var jsonEx = JsonConvert.SerializeObject(ex);
+                Log.Information($"{jsonEx}");
+
                 return BadRequest(ex.Message);
             }
         }

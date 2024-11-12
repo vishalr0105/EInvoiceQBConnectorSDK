@@ -1,11 +1,19 @@
 using EInvoiceQuickBooks;
 using EInvoiceQuickBooks.Models;
 using EInvoiceQuickBooks.Services;
+using Serilog.Events;
+using Serilog;
 using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
+Log.Logger = new LoggerConfiguration()
+             .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+             .Enrich.FromLogContext()
+             .WriteTo.File("log/Worker.txt", rollingInterval: RollingInterval.Day, retainedFileCountLimit: null)
+             .CreateLogger();
 
 // Add configuration with reloadOnChange enabled
 builder.Configuration.SetBasePath(Directory.GetCurrentDirectory())
