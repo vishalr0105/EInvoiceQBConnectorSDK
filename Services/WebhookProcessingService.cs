@@ -45,6 +45,12 @@ namespace EInvoiceQuickBooks.Services
 
                     await System.Threading.Tasks.Task.Delay(1000, stoppingToken);
                 }
+                catch (TaskCanceledException)
+                {
+                    // Handle the cancellation gracefully when no more items are available to process
+                    Log.Information("Task was canceled due to stopping request.");
+                    break;
+                }
                 catch (Exception ex)
                 {
                     Log.Information($"An error occurred while processing webhook: {ex.Message}");

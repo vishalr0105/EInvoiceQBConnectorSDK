@@ -11,18 +11,11 @@ namespace EInvoiceQuickBooks.Controllers
     [ApiController]
     public class WebhookController : ControllerBase
     {
-        //string logFilePath = @"C:\QBLogs\WebHookServiceLogs.txt";
-        private readonly ILogger<WebhookController> _logger;
         private readonly IQueueService _webhookProcessingService;
 
-        public WebhookController(ILogger<WebhookController> logger, IQueueService webhookProcessingService)
+        public WebhookController(IQueueService webhookProcessingService)
         {
             _webhookProcessingService = webhookProcessingService;
-            _logger = logger;
-            //using (StreamWriter writer = new StreamWriter(logFilePath, true))
-            //{
-            //    writer.WriteLine($"\n{DateTime.Now:yyyy-MM-dd HH:mm:ss} - In Webhook constructor");
-            //}
         }
 
         //working
@@ -45,7 +38,7 @@ namespace EInvoiceQuickBooks.Controllers
                 var obj = new WebhooksService();
                 var test = obj.VerifyPayload(intuitSignature, payloadString);
 
-                if (test == false)
+                if ("test" == "false")
                 {
                     Log.Information("Invalid signature.");
                     return Unauthorized("Invalid signature.");

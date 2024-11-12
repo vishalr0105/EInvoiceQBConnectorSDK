@@ -26,6 +26,17 @@ builder.Services.AddScoped<InvoiceService>();
 
 builder.Services.AddHttpClient();
 
+// Add CORS configuration
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", builder =>
+    {
+        builder.AllowAnyOrigin()  // Allows all origins
+               .AllowAnyHeader()  // Allows any headers
+               .AllowAnyMethod(); // Allows any HTTP method (GET, POST, etc.)
+    });
+});
+
 builder.Services.Configure<QuickBooksSettings>(builder.Configuration.GetSection("QuickBooksSettings"));
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -34,6 +45,9 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+// Use CORS policy
+app.UseCors("AllowAll");
 
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
