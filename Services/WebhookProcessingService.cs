@@ -28,82 +28,145 @@ namespace EInvoiceQuickBooks.Services
             clientKey = _configuration["QuickBooksSettings:ClientSecret"];
         }
 
-        protected override async System.Threading.Tasks.Task ExecuteAsync(CancellationToken stoppingToken)
-        {
-            while (!stoppingToken.IsCancellationRequested)
-            {
-                try
-                {
-                    if (_queueService.HasItems())
-                    {
-                        var payload = _queueService.Dequeue();
-                        if (payload != null)
-                        {
-                            await ProcessInvoiceEmailedEventAsync(payload);
-                        }
-                    }
+        //protected override async System.Threading.Tasks.Task ExecuteAsync(CancellationToken stoppingToken)
+        //{
+        //    while (!stoppingToken.IsCancellationRequested)
+        //    {
+        //        try
+        //        {
+        //            if (_queueService.HasItems())
+        //            {
+        //                var payload = _queueService.Dequeue();
+        //                if (payload != null)
+        //                {
+        //                    await ProcessInvoiceEmailedEventAsync(payload);
+        //                }
+        //            }
+        //            else
+        //            {
+        //                // If no items, check the stopping token only when the queue is empty
+        //                if (stoppingToken.IsCancellationRequested)
+        //                {
+        //                    Log.Information("Stopping requested and queue is empty. Exiting service.");
+        //                }
+        //                await System.Threading.Tasks.Task.Delay(1, stoppingToken);
+        //            }
+        //        }
+        //        catch (TaskCanceledException ex)
+        //        {
+        //            // Handle the cancellation gracefully when no more items are available to process
+        //            Log.Information($"Task was canceled due to stopping request.\n {ex}");
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            Log.Error($"An error occurred while processing webhook: {ex.Message}");
+        //        }
+        //    }
+        //    Log.Information("WebhookProcessingService has stopped.");
+        //}
 
-                    await System.Threading.Tasks.Task.Delay(1000, stoppingToken);
-                }
-                catch (TaskCanceledException)
+        // Recieve webhook event from queue
+
+        private Timer? _timer;
+
+        protected override System.Threading.Tasks.Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            // Initialize the timer to run the processing logic every 5 seconds.
+            _timer = new Timer(async state => await RunAsync(stoppingToken), null,
+                                TimeSpan.Zero, TimeSpan.FromSeconds(5));
+
+            return System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        private async System.Threading.Tasks.Task RunAsync(CancellationToken stoppingToken)
+        {
+            try
+            {
+                // Process the queue items if available.
+                if (_queueService.HasItems())
                 {
-                    // Handle the cancellation gracefully when no more items are available to process
-                    Log.Information("Task was canceled due to stopping request.");
-                    break;
+                    var payload = _queueService.Dequeue();
+                    if (payload != null)
+                    {
+                        await ProcessInvoiceEmailedEventAsync(payload);
+                    }
                 }
-                catch (Exception ex)
+                else
                 {
-                    Log.Information($"An error occurred while processing webhook: {ex.Message}");
+                    // Log if the queue is empty.
+                    if (stoppingToken.IsCancellationRequested)
+                    {
+                        Log.Information("Stopping requested and queue is empty. Exiting service.");
+                    }
                 }
+            }
+            catch (TaskCanceledException ex)
+            {
+                // Handle the cancellation gracefully.
+                Log.Information($"Task was canceled due to stopping request.\n {ex}");
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"An error occurred while processing webhook: {ex.Message}");
             }
         }
 
-        // Recieve webhook event from queue
+        public override void Dispose()
+        {
+            _timer?.Dispose();
+            base.Dispose();
+        }
         private async System.Threading.Tasks.Task ProcessInvoiceEmailedEventAsync(string payload)
         {
             // Create a new scope to resolve scoped services
-            using (var scope = _serviceProvider.CreateScope())
+            try
             {
-                var invoiceService = scope.ServiceProvider.GetRequiredService<InvoiceService>();
-
-                // Process the webhook payload
-                var obj = new WebhooksService();
-                var webhookEvents = obj.GetWebooksEvents(payload);
-
-                var invoiceId = webhookEvents.EventNotifications.First().DataChangeEvent.Entities.FirstOrDefault()?.Id;
-                var operation = webhookEvents.EventNotifications.First().DataChangeEvent.Entities.FirstOrDefault()?.Operation;
-                var realmId = webhookEvents.EventNotifications.First().RealmId;
-                var syncToken = "";
-
-                Console.WriteLine($"Processing {operation} operation on invoice with id: {invoiceId}");
-                Log.Information($"Processing {operation} operation on invoice with id: {invoiceId}");
-
-                string token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
-
-                if (operation == "Emailed")
+                using (var scope = _serviceProvider.CreateScope())
                 {
-                    token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
-                    var check = await invoiceService.CheckAlreadyExists(invoiceId, token);
-                    var originalInvoice = await invoiceService.GetInvoiceAsync(invoiceId, realmId);
+                    var invoiceService = scope.ServiceProvider.GetRequiredService<InvoiceService>();
 
-                    if (originalInvoice != null)
+                    // Process the webhook payload
+                    var obj = new WebhooksService();
+                    var webhookEvents = obj.GetWebooksEvents(payload);
+
+                    foreach (var webhookEventNotification in webhookEvents.EventNotifications)
                     {
-                        syncToken = originalInvoice.SyncToken.ToString();
-                        if (check == 0)
+                        foreach (var dataChangeEventEntity in webhookEventNotification.DataChangeEvent.Entities)
                         {
-                            var res = await ProcessMethod(originalInvoice, invoiceId, check, realmId);
+                            var invoiceId = dataChangeEventEntity.Id; 
+                            var operation = dataChangeEventEntity.Operation;
+                            var realmId = webhookEventNotification.RealmId;
+                            var syncToken = "";
 
-                            Invoice updateInvoiceInput = new Invoice();
-                            if (res.ToLower() == "success" || res.Contains("A LongId was not found for this UUID"))
+                            Console.WriteLine($"Processing {operation} operation on invoice with id: {invoiceId}");
+                            Log.Information($"Processing {operation} operation on invoice with id: {invoiceId}");
+
+                            string token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
+
+                            if (operation == "Emailed")
                             {
-                                var statusToPass = res.ToLower() == "success" ? "Invoice Sent Success" : "Validation Pending";
-                                updateInvoiceInput = new Invoice()
+                                token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
+                                var check = await invoiceService.CheckAlreadyExists(invoiceId, token);
+                                var originalInvoice = await invoiceService.GetInvoiceAsync(invoiceId, realmId);
+
+                                if (originalInvoice != null)
                                 {
-                                    Id = originalInvoice.Id,
-                                    SyncToken = originalInvoice.SyncToken,
-                                    sparse = true,
-                                    BillEmail = originalInvoice.BillEmail,
-                                    CustomField = new List<Intuit.Ipp.Data.CustomField>
+                                    syncToken = originalInvoice.SyncToken.ToString();
+                                    if (check == 0)
+                                    {
+                                        var res = await ProcessMethod(originalInvoice, invoiceId, check, realmId);
+
+                                        Invoice updateInvoiceInput = new Invoice();
+                                        if (res.ToLower() == "success" || res.Contains("A LongId was not found for this UUID"))
+                                        {
+                                            var statusToPass = res.ToLower() == "success" ? "Invoice Sent Success" : "Validation Pending";
+                                            updateInvoiceInput = new Invoice()
+                                            {
+                                                Id = originalInvoice.Id,
+                                                SyncToken = originalInvoice.SyncToken,
+                                                sparse = true,
+                                                BillEmail = originalInvoice.BillEmail,
+                                                CustomField = new List<Intuit.Ipp.Data.CustomField>
                                     {
                                         new Intuit.Ipp.Data.CustomField
                                         {
@@ -120,19 +183,19 @@ namespace EInvoiceQuickBooks.Services
                                             AnyIntuitObject = (Convert.ToInt32(syncToken) + 1).ToString()
                                         }
                                     }.ToArray(),
-                                    CustomerRef = originalInvoice.CustomerRef,
-                                    Line = originalInvoice.Line
-                                };
-                            }
-                            else if (res.ToLower() == "failure")
-                            {
-                                updateInvoiceInput = new Invoice()
-                                {
-                                    Id = originalInvoice.Id,
-                                    SyncToken = originalInvoice.SyncToken,
-                                    sparse = true,
-                                    BillEmail = originalInvoice.BillEmail,
-                                    CustomField = new List<Intuit.Ipp.Data.CustomField>
+                                                CustomerRef = originalInvoice.CustomerRef,
+                                                Line = originalInvoice.Line
+                                            };
+                                        }
+                                        else if (res.ToLower() == "failure")
+                                        {
+                                            updateInvoiceInput = new Invoice()
+                                            {
+                                                Id = originalInvoice.Id,
+                                                SyncToken = originalInvoice.SyncToken,
+                                                sparse = true,
+                                                BillEmail = originalInvoice.BillEmail,
+                                                CustomField = new List<Intuit.Ipp.Data.CustomField>
                                     {
                                         new Intuit.Ipp.Data.CustomField
                                         {
@@ -142,59 +205,59 @@ namespace EInvoiceQuickBooks.Services
                                             AnyIntuitObject = "Invoice Sent Failure"
                                         }
                                     }.ToArray(),
-                                    CustomerRef = originalInvoice.CustomerRef,
-                                    Line = originalInvoice.Line
-                                };
-                            }
-                            if (updateInvoiceInput != null)
-                            {
-                                var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
-                                if (updateRes is Invoice && updateRes != null)
-                                {
-                                    if (res == "success")
-                                    {
-                                        Log.Information($"Invoice Resent successfully - {invoiceId}");
-                                        Console.WriteLine($"Invoice Resent successfully - {invoiceId}");
+                                                CustomerRef = originalInvoice.CustomerRef,
+                                                Line = originalInvoice.Line
+                                            };
+                                        }
+                                        if (updateInvoiceInput != null)
+                                        {
+                                            var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
+                                            if (updateRes is Invoice && updateRes != null)
+                                            {
+                                                if (res == "success")
+                                                {
+                                                    Log.Information($"Invoice Resent successfully - {invoiceId}");
+                                                    Console.WriteLine($"Invoice Resent successfully - {invoiceId}");
+                                                }
+                                                else if (res == "failure")
+                                                {
+                                                    Log.Information($"Invoice Resent failure - {invoiceId}");
+                                                    Console.WriteLine($"Invoice Resent failure - {invoiceId}");
+                                                }
+                                                else
+                                                {
+                                                    Log.Information($"{res} - Invoice - {invoiceId}");
+                                                    Console.WriteLine($"{res} - Invoice - {invoiceId}");
+                                                }
+                                            }
+                                        }
                                     }
-                                    else if (res == "failure")
+                                    else if (check == 1)
                                     {
-                                        Log.Information($"Invoice Resent failure - {invoiceId}");
-                                        Console.WriteLine($"Invoice Resent failure - {invoiceId}");
-                                    }
-                                    else
-                                    {
-                                        Log.Information($"{res} - Invoice - {invoiceId}");
-                                        Console.WriteLine($"{res} - Invoice - {invoiceId}");
-                                    }
-                                }
-                            }
-                        }
-                        else if (check == 1)
-                        {
-                            //If already sent
-                            var lastSyncToken = originalInvoice.CustomField.Where(c => c.DefinitionId == "2").Select(c => c.AnyIntuitObject?.ToString()).FirstOrDefault();
-                            var originalInvoiceSyncToken = originalInvoice.SyncToken.ToString();
+                                        //If already sent
+                                        var lastSyncToken = originalInvoice.CustomField.Where(c => c.DefinitionId == "2").Select(c => c.AnyIntuitObject?.ToString()).FirstOrDefault();
+                                        var originalInvoiceSyncToken = originalInvoice.SyncToken.ToString();
 
-                            if (String.IsNullOrEmpty(lastSyncToken))
-                            {
-                                lastSyncToken = originalInvoiceSyncToken;
-                            }
+                                        if (String.IsNullOrEmpty(lastSyncToken))
+                                        {
+                                            lastSyncToken = originalInvoiceSyncToken;
+                                        }
 
-                            if (originalInvoiceSyncToken == lastSyncToken)
-                            {
-                                var res = await ProcessMethod(originalInvoice, invoiceId, check, realmId);
+                                        if (originalInvoiceSyncToken == lastSyncToken)
+                                        {
+                                            var res = await ProcessMethod(originalInvoice, invoiceId, check, realmId);
 
-                                Invoice updateInvoiceInput = new Invoice();
+                                            Invoice updateInvoiceInput = new Invoice();
 
-                                if (res.ToLower() == "success" || res.Contains("A LongId was not found for this UUID"))
-                                {
-                                    updateInvoiceInput = new Invoice()
-                                    {
-                                        Id = originalInvoice.Id,
-                                        SyncToken = originalInvoice.SyncToken,
-                                        sparse = true,
-                                        BillEmail = originalInvoice.BillEmail,
-                                        CustomField = new List<Intuit.Ipp.Data.CustomField>
+                                            if (res.ToLower() == "success" || res.Contains("A LongId was not found for this UUID"))
+                                            {
+                                                updateInvoiceInput = new Invoice()
+                                                {
+                                                    Id = originalInvoice.Id,
+                                                    SyncToken = originalInvoice.SyncToken,
+                                                    sparse = true,
+                                                    BillEmail = originalInvoice.BillEmail,
+                                                    CustomField = new List<Intuit.Ipp.Data.CustomField>
                                         {
                                             new Intuit.Ipp.Data.CustomField
                                             {
@@ -211,19 +274,19 @@ namespace EInvoiceQuickBooks.Services
                                                 AnyIntuitObject = (Convert.ToInt32(syncToken) + 1).ToString()
                                             }
                                         }.ToArray(),
-                                        CustomerRef = originalInvoice.CustomerRef,
-                                        Line = originalInvoice.Line
-                                    };
-                                }
-                                else if (res.ToLower() == "failure")
-                                {
-                                    updateInvoiceInput = new Invoice()
-                                    {
-                                        Id = originalInvoice.Id,
-                                        SyncToken = originalInvoice.SyncToken,
-                                        sparse = true,
-                                        BillEmail = originalInvoice.BillEmail,
-                                        CustomField = new List<Intuit.Ipp.Data.CustomField>
+                                                    CustomerRef = originalInvoice.CustomerRef,
+                                                    Line = originalInvoice.Line
+                                                };
+                                            }
+                                            else if (res.ToLower() == "failure")
+                                            {
+                                                updateInvoiceInput = new Invoice()
+                                                {
+                                                    Id = originalInvoice.Id,
+                                                    SyncToken = originalInvoice.SyncToken,
+                                                    sparse = true,
+                                                    BillEmail = originalInvoice.BillEmail,
+                                                    CustomField = new List<Intuit.Ipp.Data.CustomField>
                                         {
                                             new Intuit.Ipp.Data.CustomField
                                             {
@@ -233,50 +296,50 @@ namespace EInvoiceQuickBooks.Services
                                                 AnyIntuitObject = "Invoice Resent Failure"
                                             }
                                         }.ToArray(),
-                                        CustomerRef = originalInvoice.CustomerRef,
-                                        Line = originalInvoice.Line
-                                    };
-                                }
-                                if (updateInvoiceInput != null)
-                                {
-                                    var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
-                                    if (updateRes is Invoice && updateRes != null)
-                                    {
-                                        if (res == "success")
-                                        {
-                                            Log.Information($"Invoice Resent successfully - {invoiceId}");
-                                            Console.WriteLine($"Invoice Resent successfully - {invoiceId}");
+                                                    CustomerRef = originalInvoice.CustomerRef,
+                                                    Line = originalInvoice.Line
+                                                };
+                                            }
+                                            if (updateInvoiceInput != null)
+                                            {
+                                                var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
+                                                if (updateRes is Invoice && updateRes != null)
+                                                {
+                                                    if (res == "success")
+                                                    {
+                                                        Log.Information($"Invoice Resent successfully - {invoiceId}");
+                                                        Console.WriteLine($"Invoice Resent successfully - {invoiceId}");
+                                                    }
+                                                    else if (res == "failure")
+                                                    {
+                                                        Log.Information($"Invoice Resent failure - {invoiceId}");
+                                                        Console.WriteLine($"Invoice Resent failure - {invoiceId}");
+                                                    }
+                                                }
+                                            }
                                         }
-                                        else if (res == "failure")
+                                        else
                                         {
-                                            Log.Information($"Invoice Resent failure - {invoiceId}");
-                                            Console.WriteLine($"Invoice Resent failure - {invoiceId}");
-                                        }
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                //if resend and updated code goes here
-                                var dbInvoice = await invoiceService.GetDBInvoice(invoiceId, token, Convert.ToInt32(syncToken), dummyEmail);
+                                            //if resend and updated code goes here
+                                            var dbInvoice = await invoiceService.GetDBInvoice(invoiceId, token, Convert.ToInt32(syncToken), dummyEmail);
 
-                                var createRes = await invoiceService.CreateOrUpdateInvoice(dbInvoice, realmId);
+                                            var createRes = await invoiceService.CreateOrUpdateInvoice(dbInvoice, realmId);
 
-                                if (createRes.Status.ToLower() == "success")
-                                {
-                                    var res = await ProcessMethod(originalInvoice, invoiceId, check, realmId);
+                                            if (createRes.Status.ToLower() == "success")
+                                            {
+                                                var res = await ProcessMethod(originalInvoice, invoiceId, check, realmId);
 
-                                    Invoice updateInvoiceInput = new Invoice();
+                                                Invoice updateInvoiceInput = new Invoice();
 
-                                    if (res.ToLower() == "success")
-                                    {
-                                        updateInvoiceInput = new Invoice()
-                                        {
-                                            Id = originalInvoice.Id,
-                                            SyncToken = originalInvoice.SyncToken,
-                                            sparse = true,
-                                            BillEmail = originalInvoice.BillEmail,
-                                            CustomField = new List<Intuit.Ipp.Data.CustomField>
+                                                if (res.ToLower() == "success")
+                                                {
+                                                    updateInvoiceInput = new Invoice()
+                                                    {
+                                                        Id = originalInvoice.Id,
+                                                        SyncToken = originalInvoice.SyncToken,
+                                                        sparse = true,
+                                                        BillEmail = originalInvoice.BillEmail,
+                                                        CustomField = new List<Intuit.Ipp.Data.CustomField>
                                             {
                                                 new Intuit.Ipp.Data.CustomField
                                                 {
@@ -293,19 +356,19 @@ namespace EInvoiceQuickBooks.Services
                                                     AnyIntuitObject = (Convert.ToInt32(syncToken) + 1).ToString()
                                                 }
                                             }.ToArray(),
-                                            CustomerRef = originalInvoice.CustomerRef,
-                                            Line = originalInvoice.Line
-                                        };
-                                    }
-                                    else if (res.ToLower() == "failure")
-                                    {
-                                        updateInvoiceInput = new Invoice()
-                                        {
-                                            Id = originalInvoice.Id,
-                                            SyncToken = originalInvoice.SyncToken,
-                                            sparse = true,
-                                            BillEmail = originalInvoice.BillEmail,
-                                            CustomField = new List<Intuit.Ipp.Data.CustomField>
+                                                        CustomerRef = originalInvoice.CustomerRef,
+                                                        Line = originalInvoice.Line
+                                                    };
+                                                }
+                                                else if (res.ToLower() == "failure")
+                                                {
+                                                    updateInvoiceInput = new Invoice()
+                                                    {
+                                                        Id = originalInvoice.Id,
+                                                        SyncToken = originalInvoice.SyncToken,
+                                                        sparse = true,
+                                                        BillEmail = originalInvoice.BillEmail,
+                                                        CustomField = new List<Intuit.Ipp.Data.CustomField>
                                             {
                                                 new Intuit.Ipp.Data.CustomField
                                                 {
@@ -315,73 +378,73 @@ namespace EInvoiceQuickBooks.Services
                                                     AnyIntuitObject = "Invoice Resent Failure"
                                                 }
                                             }.ToArray(),
-                                            CustomerRef = originalInvoice.CustomerRef,
-                                            Line = originalInvoice.Line
-                                        };
-                                    }
-                                    if (updateInvoiceInput != null)
-                                    {
-                                        var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
-                                    }
+                                                        CustomerRef = originalInvoice.CustomerRef,
+                                                        Line = originalInvoice.Line
+                                                    };
+                                                }
+                                                if (updateInvoiceInput != null)
+                                                {
+                                                    var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
+                                                }
 
-                                    //Log success
-                                    Console.WriteLine($"Cannot Update invoice once sent to Tax Office. Reverted changes back in Invoice. And Sent Email.");
-                                    Log.Information($"Cannot Update invoice once sent to Tax Office. Reverted changes back in Invoice. And Sent Email");
+                                                //Log success
+                                                Console.WriteLine($"Cannot Update invoice once sent to Tax Office. Reverted changes back in Invoice. And Sent Email.");
+                                                Log.Information($"Cannot Update invoice once sent to Tax Office. Reverted changes back in Invoice. And Sent Email");
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
-                }
-                else if (operation == "Delete")
-                {
-                    token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
-                    var checkExists = await invoiceService.CheckAlreadyExists(invoiceId, token);
-
-                    if (checkExists == 1)
-                    {
-                        try
-                        {
-                            token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
-                            var dbInvoice = await invoiceService.GetDBInvoice(invoiceId, token, -1, dummyEmail);
-
-                            var createRes = await invoiceService.CreateOrUpdateInvoice(dbInvoice, realmId);
-                            if (createRes.Status.ToLower() == "success")
+                            else if (operation == "Delete")
                             {
-                                var sendEmailRes = await invoiceService.SendInvoiceEmailAsync(createRes.Data.Id, realmId);
+                                //token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
+                                var checkExists = await invoiceService.CheckAlreadyExists(invoiceId, token);
 
-                                Console.WriteLine($"Cannot Delete invoice once sent to Tax Office. Created back Invoice - {createRes.Data.Id}.");
-                                Log.Information($"Cannot Delete invoice once sent to Tax Office. Created back Invoice - {createRes.Data.Id}.");
+                                if (checkExists == 1)
+                                {
+                                    try
+                                    {
+                                        token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
+                                        var dbInvoice = await invoiceService.GetDBInvoice(invoiceId, token, -1, dummyEmail);
+
+                                        var createRes = await invoiceService.CreateOrUpdateInvoice(dbInvoice, realmId);
+                                        if (createRes.Status.ToLower() == "success")
+                                        {
+                                            var sendEmailRes = await invoiceService.SendInvoiceEmailAsync(createRes.Data.Id, realmId);
+
+                                            Console.WriteLine($"Cannot Delete invoice once sent to Tax Office. Created back Invoice - {createRes.Data.Id}.");
+                                            Log.Information($"Cannot Delete invoice once sent to Tax Office. Created back Invoice - {createRes.Data.Id}.");
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Console.WriteLine($"Exception in Delete-Create-Back Invoice - {invoiceId}.");
+                                        Log.Information($"Exception in Delete-Create-Back Invoice - {invoiceId}.");
+                                    }
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"Deleted invoice successfully, as it was not sent to Tax Office.");
+                                    Log.Information($"Deleted invoice successfully, as it was not sent to Tax Office.");
+                                }
                             }
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"Exception in Delete-Create-Back Invoice - {invoiceId}.");
-                            Log.Information($"Exception in Delete-Create-Back Invoice - {invoiceId}.");
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Deleted invoice successfully, as it was not sent to Tax Office.");
-                        Log.Information($"Deleted invoice successfully, as it was not sent to Tax Office.");
-                    }
-                }
-                else if (operation == "Create")
-                {
-                    var originalInvoice = await invoiceService.GetInvoiceAsync(invoiceId, realmId);
-                    if (originalInvoice != null)
-                    {
-                        var updateInvoiceInput = new Invoice()
-                        {
-                            Id = originalInvoice.Id,
-                            SyncToken = originalInvoice.SyncToken,
-                            sparse = true,
-                            BillEmail = new EmailAddress()
+                            else if (operation == "Create")
                             {
-                                DefaultSpecified = true,
-                                Default = true,
-                                Address = dummyEmail
-                            },
-                            CustomField = new List<Intuit.Ipp.Data.CustomField>
+                                var originalInvoice = await invoiceService.GetInvoiceAsync(invoiceId, realmId);
+                                if (originalInvoice != null)
+                                {
+                                    var updateInvoiceInput = new Invoice()
+                                    {
+                                        Id = originalInvoice.Id,
+                                        SyncToken = originalInvoice.SyncToken,
+                                        sparse = true,
+                                        BillEmail = new EmailAddress()
+                                        {
+                                            DefaultSpecified = true,
+                                            Default = true,
+                                            Address = dummyEmail
+                                        },
+                                        CustomField = new List<Intuit.Ipp.Data.CustomField>
                                     {
                                         new Intuit.Ipp.Data.CustomField
                                         {
@@ -398,41 +461,41 @@ namespace EInvoiceQuickBooks.Services
                                             AnyIntuitObject = !String.IsNullOrEmpty(originalInvoice.BillEmail?.Address) ?originalInvoice.BillEmail?.Address : dummyEmail,
                                         }
                                     }.ToArray(),
-                            CustomerRef = originalInvoice.CustomerRef,
-                            Line = originalInvoice.Line
-                        };
-                        var resUpdateEmail = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
-                    }
+                                        CustomerRef = originalInvoice.CustomerRef,
+                                        Line = originalInvoice.Line
+                                    };
+                                    var resUpdateEmail = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
+                                }
 
-                    Console.WriteLine($"Updated Email-field for newly created invoice - {invoiceId}.");
-                    Log.Information($"Updated Email-field for newly created invoice - {invoiceId}.");
-                }
-                else if (operation == "Update")
-                {
-                    var originalInvoice = await invoiceService.GetInvoiceAsync(invoiceId, realmId);
-
-                    var flag = false;
-                    var emailCheck = originalInvoice.BillEmail;
-                    if (emailCheck != null)
-                    {
-                        var email = emailCheck.Address.ToString();
-                        if (!String.IsNullOrEmpty(email) && email == dummyEmail)
-                        {
-                            flag = true;
-                        }
-                        if (!flag)
-                        {
-                            var updateInvoiceInput = new Invoice()
+                                Console.WriteLine($"Updated Email-field for newly created invoice - {invoiceId}.");
+                                Log.Information($"Updated Email-field for newly created invoice - {invoiceId}.");
+                            }
+                            else if (operation == "Update")
                             {
-                                Id = originalInvoice.Id,
-                                SyncToken = originalInvoice.SyncToken,
-                                sparse = true,
-                                BillEmail = new EmailAddress()
+                                var originalInvoice = await invoiceService.GetInvoiceAsync(invoiceId, realmId);
+
+                                var flag = false;
+                                var emailCheck = originalInvoice.BillEmail;
+                                if (emailCheck != null)
                                 {
-                                    Address = dummyEmail
-                                },
-                                CustomField = new List<Intuit.Ipp.Data.CustomField>
-                                {
+                                    var email = emailCheck.Address.ToString();
+                                    if (!String.IsNullOrEmpty(email) && email == dummyEmail)
+                                    {
+                                        flag = true;
+                                    }
+                                    if (!flag)
+                                    {
+                                        var updateInvoiceInput = new Invoice()
+                                        {
+                                            Id = originalInvoice.Id,
+                                            SyncToken = originalInvoice.SyncToken,
+                                            sparse = true,
+                                            BillEmail = new EmailAddress()
+                                            {
+                                                Address = dummyEmail
+                                            },
+                                            CustomField = new List<Intuit.Ipp.Data.CustomField>
+                                    {
                                         new Intuit.Ipp.Data.CustomField
                                         {
                                             DefinitionId = "3",
@@ -440,20 +503,28 @@ namespace EInvoiceQuickBooks.Services
                                             Type =CustomFieldTypeEnum.StringType,
                                             AnyIntuitObject = "Invoice Updated"
                                         }
-                                }.ToArray(),
-                                CustomerRef = originalInvoice.CustomerRef,
-                                Line = originalInvoice.Line
-                            };
-                            var resUpdateEmail = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
+                                    }.ToArray(),
+                                            CustomerRef = originalInvoice.CustomerRef,
+                                            Line = originalInvoice.Line
+                                        };
+                                        var resUpdateEmail = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
 
-                            Console.WriteLine($"Found an attempt to update Email-field, Reverted back for Invoice - {invoiceId}");
-                            Log.Information($"Found an attempt to update Email-field, Reverted back for Invoice - {invoiceId}");
+                                        Console.WriteLine($"Found an attempt to update Email-field, Reverted back for Invoice - {invoiceId}");
+                                        Log.Information($"Found an attempt to update Email-field, Reverted back for Invoice - {invoiceId}");
+                                    }
+                                }
+                            }
+
+                            Console.WriteLine($"Invoice {invoiceId} processed successfully for operation {operation}.");
+                            Log.Information($"Invoice {invoiceId} processed successfully for operation {operation}.");
                         }
                     }
                 }
-
-                Console.WriteLine($"Invoice {invoiceId} processed successfully for operation {operation}.");
-                Log.Information($"Invoice {invoiceId} processed successfully for operation {operation}.");
+            }
+            catch (Exception ex)
+            {
+                Log.Information($"An error occured in ProcessInvoiceEmailedEventAsync :{ex}");
+                throw ex;
             }
         }
 
@@ -547,55 +618,55 @@ namespace EInvoiceQuickBooks.Services
         {
             return new InvoiceRequest
             {
-                eInvoiceVersion = "1.0",
-                eInvoiceTypeCode = "01",
+                eInvoiceVersion = "1.0",//static
+                eInvoiceTypeCode = "01",//static
                 eInvoiceCodeOrNumber = invoice.Id,
-                SourceInvoiceNumber = "INV00000ALL",
-                eInvoiceDate = "2023-12-29",
-                eInvoiceTime = "03:16:56Z",
-                InvoiceCurrencyCode = "MYR",
-                CurrencyExchangeRate = "1.00000",
-                PaymentMode = "03",
-                PaymentTerms = "30 days from invoice date",
-                PaymentDueDate = invoice.DueDate.ToString("yyyy-MM-dd"),//"2024-01-28",
-                BillReferenceNumber = "PO NO: 3261164188",
-                SellerBankAccountNumber = "MBBEMYKL#514356100499",
-                SellerName = !string.IsNullOrEmpty(company.CompanyName) ? company.CompanyName : "Advintek Consulting Services Sdn. Bhd.",
-                SellerTIN = "C26072927020",
-                SellerCategory = "BRN",
-                SellerBusinessRegistrationNumber = "201901029037",
-                SellerSSTRegistrationNumber = "NA",
-                SellerEmail = company.Email?.Address ?? "info@advintek.com.my",
-                SellerMalaysiaStandardIndustrialClassificationCode = "30910",
+                SourceInvoiceNumber = invoice.Id,
+                eInvoiceDate = DateTime.Now.ToString("yyyy-MM-dd"),//"2023-12-29",
+                eInvoiceTime = DateTime.Now.ToString("HH:mm:ss") + "Z",//"03:16:56Z",
+                InvoiceCurrencyCode = invoice.CurrencyRef.Value, //"MYR",
+                //CurrencyExchangeRate = "1.00000", // No need
+                //PaymentMode = "03",
+                //PaymentTerms = "30 days from invoice date",
+                //PaymentDueDate = invoice.DueDate.ToString("yyyy-MM-dd"),//"2024-01-28",
+                BillReferenceNumber = "PO NO: 3261164188", //To cehck imp
+                SellerBankAccountNumber = "MBBEMYKL#514356100499", //To cehck imp
+                SellerName = company.CompanyName,  
+                SellerTIN = "C26072927020", //To cehck imp
+                SellerCategory = "BRN",   //To cehck
+                SellerBusinessRegistrationNumber = "201901029037", //To cehck imp not static
+                SellerSSTRegistrationNumber = "NA",  //To cehck imp not static
+                SellerEmail = company.Email?.Address,//company
+                SellerMalaysiaStandardIndustrialClassificationCode = "30910",  // from company
                 SellerContactNumber = !string.IsNullOrEmpty(company.Mobile?.FreeFormNumber) ? company.Mobile.FreeFormNumber
-                                    : !string.IsNullOrEmpty(company.PrimaryPhone?.FreeFormNumber) ? company.PrimaryPhone.FreeFormNumber
-                                    : "0123456789", //"+60122672127",
+                                    : !string.IsNullOrEmpty(company.PrimaryPhone?.FreeFormNumber) ? company.PrimaryPhone.FreeFormNumber : "",
                 SellerAddressLine0 = company.LegalAddr?.Line1,
                 SellerAddressLine1 = company.LegalAddr?.Line2,
                 SellerAddressLine2 = company.LegalAddr?.Line3,
-                SellerPostalZone = company.LegalAddr?.PostalCode ?? "50100",
-                SellerCityName = company.LegalAddr?.City ?? "Kuala Lumpur",
-                SellerState = "14", //company.LegalAddr?.CountrySubDivisionCode ?? " ",
-                SellerCountry = "MYS",//company.Country ?? "MYS",
-                SellerBusinessActivityDescription = "MEDICAL LABORATORIES",
-                SellerMSIC = "46201",
+                SellerPostalZone = company.LegalAddr?.PostalCode,
+                SellerCityName = company.LegalAddr?.City,
+                SellerState = "14", //company.LegalAddr?.CountrySubDivisionCode ?? " ", //To check from company
+                SellerCountry = "MYS",//company.Country ?? "MYS",    //To check from company
+                SellerBusinessActivityDescription = "MEDICAL LABORATORIES",  //To check from company not required 
+                SellerMSIC = "46201", // to check imp
                 BuyerName = invoice.CustomerRef.Value,
-                BuyerTIN = "C20307408040",
-                BuyerCategory = "BRN",
-                BuyerBusinessRegistrationNumber = "200601028904",
-                BuyerIdentificationNumberOrPassportNumber = null,
-                BuyerSSTRegistrationNumber = "B10-1808-22000011",
+                BuyerTIN = "C20307408040",  // to check imp
+                BuyerCategory = "BRN",  // to check imp
+                BuyerBusinessRegistrationNumber = "200601028904",   // to check imp
+                BuyerIdentificationNumberOrPassportNumber = null,   // to check imp
+                BuyerSSTRegistrationNumber = "B10-1808-22000011",   // to check imp
                 BuyerEmail = invoice.CustomField.Where(c => c.DefinitionId == "1" && c.AnyIntuitObject != null).Select(c => c.AnyIntuitObject.ToString()).FirstOrDefault() ?? dummyEmail,
-                BuyerContactNumber = "16097995959",
+                BuyerContactNumber = "16097995959", // to check imp not required but check
                 BuyerAddressLine0 = !string.IsNullOrEmpty(invoice.BillAddr.Line1) ? invoice.BillAddr.Line1 : "Line 1",
                 BuyerAddressLine1 = invoice.BillAddr?.Line2,
                 BuyerAddressLine2 = invoice.BillAddr?.Line3,
-                BuyerPostalZone = invoice.BillAddr?.PostalCode ?? " ",
-                BuyerCityName = invoice.BillAddr?.City ?? "Kuala Lumpur",
-                BuyerState = "14",//invoice.BillAddr?.CountrySubDivisionCode ??
-                BuyerCountry = "MYS",//invoice.BillAddr?.Country ??
-                SumOfInvoiceLineNetAmount = invoice.TotalAmt.ToString(),
-                SumOfAllowancesOnDocumentLevel = "0.00",
+                BuyerPostalZone = invoice.BillAddr?.PostalCode,
+                BuyerCityName = invoice.BillAddr?.City,
+                BuyerState = "14",//invoice.BillAddr?.CountrySubDivisionCode ?? // to check imp
+                BuyerCountry = "MYS",//invoice.BillAddr?.Country ??     // to check imp
+
+                SumOfInvoiceLineNetAmount = invoice.TotalAmt.ToString(), // to check imp
+                SumOfAllowancesOnDocumentLevel = "0.00",        // to check imp
                 TotalFeeOrChargeAmount = "0.00",
                 TotalExcludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0",
                 TotalIncludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0",

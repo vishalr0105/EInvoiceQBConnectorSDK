@@ -14,6 +14,9 @@ using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
 using Intuit.Ipp.Diagnostics;
 using Serilog;
+using System.Security.Policy;
+using System.Diagnostics;
+using System.Security.AccessControl;
 
 namespace EInvoiceQuickBooks.Services
 {
@@ -26,6 +29,7 @@ namespace EInvoiceQuickBooks.Services
         private readonly string clientKey;
         private readonly string refreshToken;
         private readonly string lhdnBaseUrl;
+        private readonly string environment;
 
         public InvoiceService(IHttpClientFactory httpClientFactory, IOptions<QuickBooksSettings> quickBooksSettings, IConfiguration configuration)
         {
@@ -36,6 +40,7 @@ namespace EInvoiceQuickBooks.Services
             clientKey = _qBooksConfig.ClientSecret;
             refreshToken = _qBooksConfig.RefreshToken;
             lhdnBaseUrl = _configuration["LHDNBaseUrl"];
+            environment = _configuration["Environment"];
         }
 
         #region QB API's
@@ -170,6 +175,10 @@ namespace EInvoiceQuickBooks.Services
             try
             {
                 var accessToken = await GetAccessToken();
+                if (accessToken == null || accessToken.Contains("Error"))
+                {
+                    return "Refresh token expired, and unable to refresh it. Please update refresh token in configuration.";
+                }
 
                 HttpClient client = new HttpClient();
 
@@ -208,24 +217,48 @@ namespace EInvoiceQuickBooks.Services
         // Get Access Token from QB
         public async Task<string> GetAccessToken()
         {
-            var oauth2Client = new OAuth2Client(clientId, clientKey, "https://developer.intuit.com/v2/OAuth2Playground/RedirectUrl", "production");
-
-            var previousRefreshToken = refreshToken;
-            var tokenResp = await oauth2Client.RefreshTokenAsync(previousRefreshToken);
-            var data = tokenResp;
-
-            if (!String.IsNullOrEmpty(data.Error) || String.IsNullOrEmpty(data.RefreshToken) || String.IsNullOrEmpty(data.AccessToken))
+            try
             {
-                throw new Exception("Refresh token failed - " + data.Error);
-            }
 
-            // If we've got a new refresh_token store it in the file
-            if (previousRefreshToken != data.RefreshToken)
-            {
-                Console.WriteLine("Writing new refresh token : " + data.RefreshToken);
-                WriteNewRefreshTokenToWhereItIsStored(data.RefreshToken);
+                var oauth2Client = new OAuth2Client(clientId, clientKey, "https://developer.intuit.com/v2/OAuth2Playground/RedirectUrl", environment);
+
+                var previousRefreshToken = refreshToken;
+                var tokenResp = await oauth2Client.RefreshTokenAsync(previousRefreshToken);
+                if (tokenResp.IsError)
+                {
+                    if (tokenResp.Error == "invalid_grant")
+                    {
+                        Log.Information($"{tokenResp.Error}");
+                        return $"Error - {tokenResp.Error}";
+                    }
+                }
+                var data = tokenResp;
+
+                if (!String.IsNullOrEmpty(data.Error) || String.IsNullOrEmpty(data.RefreshToken) || String.IsNullOrEmpty(data.AccessToken))
+                {
+                    throw new Exception("Refresh token failed - " + data.Error);
+                }
+
+                // If we've got a new refresh_token store it in the file
+                if (previousRefreshToken != data.RefreshToken)
+                {
+                    Console.WriteLine("Writing new refresh token : " + data.RefreshToken);
+                    var resp = WriteNewRefreshTokenToWhereItIsStored(data.RefreshToken);
+                    if (resp == "success")
+                    {
+                        if (_configuration is IConfigurationRoot configurationRoot)
+                        {
+                            configurationRoot.Reload();
+                        }
+                    }
+                }
+                return data.AccessToken;
             }
-            return data.AccessToken;
+            catch (Exception ex)
+            {
+                Log.Information($"Error in GetAccessToken - {ex}");
+                throw ex;
+            }
         }
 
         // Update Refresh Token in Configuration file
@@ -243,6 +276,11 @@ namespace EInvoiceQuickBooks.Services
             File.WriteAllText(_filePath, output);
 
             return "success";
+        }
+
+        public void ReloadConfiguration(IConfigurationRoot configurationRoot)
+        {
+            configurationRoot.Reload();
         }
 
         #endregion
@@ -334,6 +372,41 @@ namespace EInvoiceQuickBooks.Services
 
         #region LHDN API's calling
 
+        // Get QB Refresh Token(Previous) from DB
+        public async Task<string> GetDbRefreshToken(string clientID, string clientKey, string realmId)
+        {
+            try
+            {
+                var company = await GetCompanyInfo(realmId);
+
+                var companyEmail = company.Email.Address;
+
+                var _httpClient = new HttpClient();
+                var url = $"{lhdnBaseUrl}/LoginWithQB?ClientID={clientID}&ClientKey={clientKey}&EmailId={companyEmail}";
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Add("accept", "*/*");
+
+                var response = await _httpClient.SendAsync(request);
+
+                var content = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var jsonDocument = JsonDocument.Parse(content);
+                    var root = jsonDocument.RootElement;
+                    var token = root.GetProperty("data").GetProperty("token").GetString();
+                    return token;
+                }
+                return content;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An error occurred: {ex.Message}");
+                Log.Information($"An error occurred: {ex.Message}");
+                return ex.Message;
+            }
+        }
+
         // Get Access Token for LHDN API's
         public async Task<string> GetQuickBooksLoginDataAsync(string clientID, string clientKey, string realmId)
         {
@@ -365,7 +438,7 @@ namespace EInvoiceQuickBooks.Services
             {
                 Console.WriteLine($"An error occurred: {ex.Message}");
                 Log.Information($"An error occurred: {ex.Message}");
-                return string.Empty;
+                return ex.Message;
             }
         }
 

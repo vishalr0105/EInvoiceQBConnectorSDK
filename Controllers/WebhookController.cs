@@ -24,7 +24,7 @@ namespace EInvoiceQuickBooks.Controllers
         {
             try
             {
-                Log.Information("ReceiveWebhook called");
+                Log.Information($"\n\n-----ReceiveWebhook called-----\n\n{payload}");
 
                 var payloadString = payload.GetRawText();
                 var intuitSignature = Request.Headers["intuit-signature"].ToString();
@@ -38,7 +38,7 @@ namespace EInvoiceQuickBooks.Controllers
                 var obj = new WebhooksService();
                 var test = obj.VerifyPayload(intuitSignature, payloadString);
 
-                if ("test" == "false")
+                if (test == false)
                 {
                     Log.Information("Invalid signature.");
                     return Unauthorized("Invalid signature.");
@@ -60,8 +60,7 @@ namespace EInvoiceQuickBooks.Controllers
             }
             catch (Exception ex)
             {
-                var jsonEx = JsonConvert.SerializeObject(ex);
-                Log.Information($"{jsonEx}");
+                Log.Error($"Error in ReceiveWebhook - {ex}");
 
                 return BadRequest(ex.Message);
             }
