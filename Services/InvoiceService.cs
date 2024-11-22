@@ -12,11 +12,7 @@ using EInvoiceQuickBooks.Models1;
 using Newtonsoft.Json.Linq;
 using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
-using Intuit.Ipp.Diagnostics;
 using Serilog;
-using System.Security.Policy;
-using System.Diagnostics;
-using System.Security.AccessControl;
 
 namespace EInvoiceQuickBooks.Services
 {
@@ -27,7 +23,6 @@ namespace EInvoiceQuickBooks.Services
         private readonly IConfiguration _configuration;
         private readonly string clientId;
         private readonly string clientKey;
-        private readonly string refreshToken;
         private readonly string lhdnBaseUrl;
         private readonly string environment;
 
@@ -38,7 +33,6 @@ namespace EInvoiceQuickBooks.Services
             _qBooksConfig = quickBooksSettings.Value;
             clientId = _qBooksConfig.ClientId;
             clientKey = _qBooksConfig.ClientSecret;
-            refreshToken = _qBooksConfig.RefreshToken;
             lhdnBaseUrl = _configuration["LHDNBaseUrl"];
             environment = _configuration["Environment"];
         }
@@ -50,7 +44,7 @@ namespace EInvoiceQuickBooks.Services
         {
             try
             {
-                var accessToken = await GetAccessToken();
+                var accessToken = await GetAccessToken(realmId);
 
                 var oauthValidator = new OAuth2RequestValidator(accessToken);
                 var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
@@ -67,7 +61,7 @@ namespace EInvoiceQuickBooks.Services
             {
                 var jsonEx = JsonConvert.SerializeObject(ex);
                 Log.Information($"{jsonEx}");
-                throw ex;
+                throw;
             }
         }
 
@@ -76,7 +70,7 @@ namespace EInvoiceQuickBooks.Services
         {
             try
             {
-                var accessToken = await GetAccessToken();
+                var accessToken = await GetAccessToken(realmId);
 
                 var oauthValidator = new OAuth2RequestValidator(accessToken);
                 var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
@@ -100,7 +94,7 @@ namespace EInvoiceQuickBooks.Services
         {
             try
             {
-                var accessToken = await GetAccessToken();
+                var accessToken = await GetAccessToken(realmId);
 
                 var oauthValidator = new OAuth2RequestValidator(accessToken);
                 var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
@@ -117,7 +111,7 @@ namespace EInvoiceQuickBooks.Services
             {
                 var jsonEx = JsonConvert.SerializeObject(ex);
                 Log.Information($"{jsonEx}");
-                throw ex;
+                throw;
             }
         }
 
@@ -126,7 +120,7 @@ namespace EInvoiceQuickBooks.Services
         {
             try
             {
-                var accessToken = await GetAccessToken();
+                var accessToken = await GetAccessToken(realmId);
 
                 var content = new StringContent(invoiceUpdate.ToString(), Encoding.UTF8, "application/json");
 
@@ -174,7 +168,8 @@ namespace EInvoiceQuickBooks.Services
         {
             try
             {
-                var accessToken = await GetAccessToken();
+                var accessToken = await GetAccessToken(realmId);
+
                 if (accessToken == null || accessToken.Contains("Error"))
                 {
                     return "Refresh token expired, and unable to refresh it. Please update refresh token in configuration.";
@@ -210,20 +205,18 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
-        #endregion
-
-        #region QB Access/Refresh Token
+        #region QB Token
 
         // Get Access Token from QB
-        public async Task<string> GetAccessToken()
+        public async Task<string> GetAccessToken(string realmId)
         {
             try
             {
+                var dbrefreshToken = await GetDbRefreshToken(realmId);
 
                 var oauth2Client = new OAuth2Client(clientId, clientKey, "https://developer.intuit.com/v2/OAuth2Playground/RedirectUrl", environment);
 
-                var previousRefreshToken = refreshToken;
-                var tokenResp = await oauth2Client.RefreshTokenAsync(previousRefreshToken);
+                var tokenResp = await oauth2Client.RefreshTokenAsync(dbrefreshToken);
                 if (tokenResp.IsError)
                 {
                     if (tokenResp.Error == "invalid_grant")
@@ -240,59 +233,29 @@ namespace EInvoiceQuickBooks.Services
                 }
 
                 // If we've got a new refresh_token store it in the file
-                if (previousRefreshToken != data.RefreshToken)
+                if (dbrefreshToken != data.RefreshToken)
                 {
-                    Console.WriteLine("Writing new refresh token : " + data.RefreshToken);
-                    var resp = WriteNewRefreshTokenToWhereItIsStored(data.RefreshToken);
-                    if (resp == "success")
-                    {
-                        if (_configuration is IConfigurationRoot configurationRoot)
-                        {
-                            configurationRoot.Reload();
-                        }
-                    }
+                    Console.WriteLine("New Refresh Token Found: " + data.RefreshToken);
                 }
                 return data.AccessToken;
             }
             catch (Exception ex)
             {
                 Log.Information($"Error in GetAccessToken - {ex}");
-                throw ex;
+                throw;
             }
-        }
-
-        // Update Refresh Token in Configuration file
-        private string WriteNewRefreshTokenToWhereItIsStored(string newRefreshToken)
-        {
-            string _filePath = Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json");
-            var section = "QuickBooksSettings";
-            var key = "RefreshToken";
-            var newValue = newRefreshToken;
-
-            var json = File.ReadAllText(_filePath);
-            dynamic jsonObj = JsonConvert.DeserializeObject(json);
-            jsonObj[section][key] = newValue;
-            string output = JsonConvert.SerializeObject(jsonObj, Formatting.Indented);
-            File.WriteAllText(_filePath, output);
-
-            return "success";
-        }
-
-        public void ReloadConfiguration(IConfigurationRoot configurationRoot)
-        {
-            configurationRoot.Reload();
         }
 
         #endregion
 
-        #region Company Details
+        #region QB Company Details
 
         // Get company info from realmId
         public async Task<Company> GetCompanyInfo(string realmId)
         {
             try
             {
-                var accessToken = await GetAccessToken();
+                var accessToken = await GetAccessToken(realmId);
 
                 var oauthValidator = new OAuth2RequestValidator(accessToken);
                 var serviceContext = new ServiceContext(realmId, IntuitServicesType.IPS, oauthValidator);
@@ -311,6 +274,8 @@ namespace EInvoiceQuickBooks.Services
                 throw;
             }
         }
+
+        #endregion
 
         #endregion
 
@@ -373,18 +338,17 @@ namespace EInvoiceQuickBooks.Services
         #region LHDN API's calling
 
         // Get QB Refresh Token(Previous) from DB
-        public async Task<string> GetDbRefreshToken(string clientID, string clientKey, string realmId)
+        public async Task<string> GetDbRefreshToken(string realmId)
         {
             try
             {
-                var company = await GetCompanyInfo(realmId);
-
-                var companyEmail = company.Email.Address;
+                string token = await GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
 
                 var _httpClient = new HttpClient();
-                var url = $"{lhdnBaseUrl}/LoginWithQB?ClientID={clientID}&ClientKey={clientKey}&EmailId={companyEmail}";
+                var url = $"{lhdnBaseUrl}/GetRefreshToken";
                 var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.Add("accept", "*/*");
+                request.Headers.Add("Authorization", $"Bearer {token}");
 
                 var response = await _httpClient.SendAsync(request);
 
@@ -394,8 +358,8 @@ namespace EInvoiceQuickBooks.Services
                 {
                     var jsonDocument = JsonDocument.Parse(content);
                     var root = jsonDocument.RootElement;
-                    var token = root.GetProperty("data").GetProperty("token").GetString();
-                    return token;
+                    var refreshToken = root.GetProperty("data").GetProperty("refreshToken").GetString();
+                    return refreshToken;
                 }
                 return content;
             }
@@ -407,20 +371,72 @@ namespace EInvoiceQuickBooks.Services
             }
         }
 
+        // Get LHDN Company Information
+        public async Task<LhdnCompany> GetLhdnCompanyInfo(string token)
+        {
+            try
+            {
+                var client = new HttpClient();
+                var request = new HttpRequestMessage(HttpMethod.Get, $"{lhdnBaseUrl}/GetCompanyDetails");
+                request.Headers.Add("accept", "*/*");
+                request.Headers.Add("Authorization", $"Bearer {token}");
+
+                var response = await client.SendAsync(request);
+
+                var content = await response.Content.ReadAsStringAsync();
+                if (response.IsSuccessStatusCode)
+                {
+                    var responsec = JsonConvert.DeserializeObject<SubmitDocumentResponse>(content);
+
+                    return (LhdnCompany)responsec.Data;
+                }
+                return new LhdnCompany();
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
+        // Get LHDN Participent Information
+        public async Task<LhdnParticipant> GetCustomerDetails(string token, string emailAddress)
+        {
+            try
+            {
+                var client = new HttpClient();
+                var url = $"{lhdnBaseUrl}/GetCustomerDetails?EmailAddress={emailAddress}";
+
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Add("accept", "*/*");
+                request.Headers.Add("Authorization", $"Bearer {token}");
+
+                var response = await client.SendAsync(request);
+
+                var content = await response.Content.ReadAsStringAsync();
+                if (response.IsSuccessStatusCode)
+                {
+                    var responsec = JsonConvert.DeserializeObject<SubmitDocumentResponse>(content);
+
+                    return (LhdnParticipant)responsec.Data;
+                }
+                return new LhdnParticipant();
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
         // Get Access Token for LHDN API's
         public async Task<string> GetQuickBooksLoginDataAsync(string clientID, string clientKey, string realmId)
         {
             try
             {
-                var company = await GetCompanyInfo(realmId);
-
-                var companyEmail = company.Email.Address;
-
                 var _httpClient = new HttpClient();
-                var url = $"{lhdnBaseUrl}/LoginWithQB?ClientID={clientID}&ClientKey={clientKey}&EmailId={companyEmail}";
+
+                var url = $"{lhdnBaseUrl}/LoginWithQB?ClientID={clientID}&ClientKey={clientKey}&RealmId={realmId}";
                 var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.Add("accept", "*/*");
-
                 var response = await _httpClient.SendAsync(request);
 
                 var content = await response.Content.ReadAsStringAsync();
@@ -467,7 +483,7 @@ namespace EInvoiceQuickBooks.Services
                 }
                 return 0;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return 3;
             }
@@ -729,7 +745,7 @@ namespace EInvoiceQuickBooks.Services
             {
                 var jsonEx = JsonConvert.SerializeObject(ex);
                 Log.Information($"{jsonEx}");
-                throw ex;
+                throw;
             }
         }
 

@@ -1,13 +1,13 @@
 ﻿using EInvoiceQuickBooks.Services;
 using Intuit.Ipp.WebhooksService;
 using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json;
 using Serilog;
 using System.Text.Json;
 
 namespace EInvoiceQuickBooks.Controllers
 {
     [Route("api/[controller]")]
+    [ApiExplorerSettings(GroupName = "Webhook")]
     [ApiController]
     public class WebhookController : ControllerBase
     {

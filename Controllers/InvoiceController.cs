@@ -17,7 +17,7 @@ namespace EInvoiceQuickBooks.Controllers
         }
 
         #region short url
-        [NonAction]
+        //[NonAction]
         [HttpPost("shorten")]
         public async Task<IActionResult> ShortenUrl([FromBody] UrlRequest urlRequest)
         {
@@ -27,7 +27,7 @@ namespace EInvoiceQuickBooks.Controllers
             var shortUrl = await ShortenUrlAsync(urlRequest.Url);
             return Ok(new { ShortUrl = shortUrl });
         }
-        [NonAction]
+        //[NonAction]
         [HttpGet("{shortCode}")]
         public async Task<IActionResult> RedirectToOriginalUrl(string shortCode)
         {

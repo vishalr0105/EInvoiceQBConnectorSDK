@@ -28,45 +28,7 @@ namespace EInvoiceQuickBooks.Services
             clientKey = _configuration["QuickBooksSettings:ClientSecret"];
         }
 
-        //protected override async System.Threading.Tasks.Task ExecuteAsync(CancellationToken stoppingToken)
-        //{
-        //    while (!stoppingToken.IsCancellationRequested)
-        //    {
-        //        try
-        //        {
-        //            if (_queueService.HasItems())
-        //            {
-        //                var payload = _queueService.Dequeue();
-        //                if (payload != null)
-        //                {
-        //                    await ProcessInvoiceEmailedEventAsync(payload);
-        //                }
-        //            }
-        //            else
-        //            {
-        //                // If no items, check the stopping token only when the queue is empty
-        //                if (stoppingToken.IsCancellationRequested)
-        //                {
-        //                    Log.Information("Stopping requested and queue is empty. Exiting service.");
-        //                }
-        //                await System.Threading.Tasks.Task.Delay(1, stoppingToken);
-        //            }
-        //        }
-        //        catch (TaskCanceledException ex)
-        //        {
-        //            // Handle the cancellation gracefully when no more items are available to process
-        //            Log.Information($"Task was canceled due to stopping request.\n {ex}");
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            Log.Error($"An error occurred while processing webhook: {ex.Message}");
-        //        }
-        //    }
-        //    Log.Information("WebhookProcessingService has stopped.");
-        //}
-
         // Recieve webhook event from queue
-
         private Timer? _timer;
 
         protected override System.Threading.Tasks.Task ExecuteAsync(CancellationToken stoppingToken)
@@ -133,7 +95,7 @@ namespace EInvoiceQuickBooks.Services
                     {
                         foreach (var dataChangeEventEntity in webhookEventNotification.DataChangeEvent.Entities)
                         {
-                            var invoiceId = dataChangeEventEntity.Id; 
+                            var invoiceId = dataChangeEventEntity.Id;
                             var operation = dataChangeEventEntity.Operation;
                             var realmId = webhookEventNotification.RealmId;
                             var syncToken = "";
@@ -167,22 +129,22 @@ namespace EInvoiceQuickBooks.Services
                                                 sparse = true,
                                                 BillEmail = originalInvoice.BillEmail,
                                                 CustomField = new List<Intuit.Ipp.Data.CustomField>
-                                    {
-                                        new Intuit.Ipp.Data.CustomField
-                                        {
-                                            DefinitionId = "3",
-                                            Name = "EInvoice Validation Status",
-                                            Type =CustomFieldTypeEnum.StringType,
-                                            AnyIntuitObject = statusToPass
-                                        },
-                                        new Intuit.Ipp.Data.CustomField
-                                        {
-                                            DefinitionId = "2",
-                                            Name = "Invoice Sent SyncToken",
-                                            Type =CustomFieldTypeEnum.StringType,
-                                            AnyIntuitObject = (Convert.ToInt32(syncToken) + 1).ToString()
-                                        }
-                                    }.ToArray(),
+                                                {
+                                                    new Intuit.Ipp.Data.CustomField
+                                                    {
+                                                        DefinitionId = "3",
+                                                        Name = "EInvoice Validation Status",
+                                                        Type =CustomFieldTypeEnum.StringType,
+                                                        AnyIntuitObject = statusToPass
+                                                    },
+                                                    new Intuit.Ipp.Data.CustomField
+                                                    {
+                                                        DefinitionId = "2",
+                                                        Name = "Invoice Sent SyncToken",
+                                                        Type =CustomFieldTypeEnum.StringType,
+                                                        AnyIntuitObject = (Convert.ToInt32(syncToken) + 1).ToString()
+                                                    }
+                                                }.ToArray(),
                                                 CustomerRef = originalInvoice.CustomerRef,
                                                 Line = originalInvoice.Line
                                             };
@@ -196,20 +158,20 @@ namespace EInvoiceQuickBooks.Services
                                                 sparse = true,
                                                 BillEmail = originalInvoice.BillEmail,
                                                 CustomField = new List<Intuit.Ipp.Data.CustomField>
-                                    {
-                                        new Intuit.Ipp.Data.CustomField
-                                        {
-                                            DefinitionId = "3",
-                                            Name = "EInvoice Validation Status",
-                                            Type =CustomFieldTypeEnum.StringType,
-                                            AnyIntuitObject = "Invoice Sent Failure"
-                                        }
-                                    }.ToArray(),
+                                                {
+                                                    new Intuit.Ipp.Data.CustomField
+                                                    {
+                                                        DefinitionId = "3",
+                                                        Name = "EInvoice Validation Status",
+                                                        Type =CustomFieldTypeEnum.StringType,
+                                                        AnyIntuitObject = "Invoice Sent Failure"
+                                                    }
+                                                }.ToArray(),
                                                 CustomerRef = originalInvoice.CustomerRef,
                                                 Line = originalInvoice.Line
                                             };
                                         }
-                                        if (updateInvoiceInput != null)
+                                        if (updateInvoiceInput != null && updateInvoiceInput.Id != null)
                                         {
                                             var updateRes = await invoiceService.UpdateInvoice(updateInvoiceInput, realmId);
                                             if (updateRes is Invoice && updateRes != null)
@@ -258,22 +220,22 @@ namespace EInvoiceQuickBooks.Services
                                                     sparse = true,
                                                     BillEmail = originalInvoice.BillEmail,
                                                     CustomField = new List<Intuit.Ipp.Data.CustomField>
-                                        {
-                                            new Intuit.Ipp.Data.CustomField
-                                            {
-                                                DefinitionId = "3",
-                                                Name = "EInvoice Validation Status",
-                                                Type =CustomFieldTypeEnum.StringType,
-                                                AnyIntuitObject = "Invoice Resent Success"
-                                            },
-                                            new Intuit.Ipp.Data.CustomField
-                                            {
-                                                DefinitionId = "2",
-                                                Name = "Invoice Sent SyncToken",
-                                                Type =CustomFieldTypeEnum.StringType,
-                                                AnyIntuitObject = (Convert.ToInt32(syncToken) + 1).ToString()
-                                            }
-                                        }.ToArray(),
+                                                    {
+                                                        new Intuit.Ipp.Data.CustomField
+                                                        {
+                                                            DefinitionId = "3",
+                                                            Name = "EInvoice Validation Status",
+                                                            Type =CustomFieldTypeEnum.StringType,
+                                                            AnyIntuitObject = "Invoice Resent Success"
+                                                        },
+                                                        new Intuit.Ipp.Data.CustomField
+                                                        {
+                                                            DefinitionId = "2",
+                                                            Name = "Invoice Sent SyncToken",
+                                                            Type =CustomFieldTypeEnum.StringType,
+                                                            AnyIntuitObject = (Convert.ToInt32(syncToken) + 1).ToString()
+                                                        }
+                                                    }.ToArray(),
                                                     CustomerRef = originalInvoice.CustomerRef,
                                                     Line = originalInvoice.Line
                                                 };
@@ -287,15 +249,15 @@ namespace EInvoiceQuickBooks.Services
                                                     sparse = true,
                                                     BillEmail = originalInvoice.BillEmail,
                                                     CustomField = new List<Intuit.Ipp.Data.CustomField>
-                                        {
-                                            new Intuit.Ipp.Data.CustomField
-                                            {
-                                                DefinitionId = "3",
-                                                Name = "EInvoice Validation Status",
-                                                Type =CustomFieldTypeEnum.StringType,
-                                                AnyIntuitObject = "Invoice Resent Failure"
-                                            }
-                                        }.ToArray(),
+                                                    {
+                                                        new Intuit.Ipp.Data.CustomField
+                                                        {
+                                                            DefinitionId = "3",
+                                                            Name = "EInvoice Validation Status",
+                                                            Type =CustomFieldTypeEnum.StringType,
+                                                            AnyIntuitObject = "Invoice Resent Failure"
+                                                        }
+                                                    }.ToArray(),
                                                     CustomerRef = originalInvoice.CustomerRef,
                                                     Line = originalInvoice.Line
                                                 };
@@ -325,7 +287,7 @@ namespace EInvoiceQuickBooks.Services
 
                                             var createRes = await invoiceService.CreateOrUpdateInvoice(dbInvoice, realmId);
 
-                                            if (createRes.Status.ToLower() == "success")
+                                            if (createRes?.Status?.ToLower() == "success")
                                             {
                                                 var res = await ProcessMethod(originalInvoice, invoiceId, check, realmId);
 
@@ -340,22 +302,22 @@ namespace EInvoiceQuickBooks.Services
                                                         sparse = true,
                                                         BillEmail = originalInvoice.BillEmail,
                                                         CustomField = new List<Intuit.Ipp.Data.CustomField>
-                                            {
-                                                new Intuit.Ipp.Data.CustomField
-                                                {
-                                                    DefinitionId = "3",
-                                                    Name = "EInvoice Validation Status",
-                                                    Type =CustomFieldTypeEnum.StringType,
-                                                    AnyIntuitObject = "Invoice Resent Success"
-                                                },
-                                                new Intuit.Ipp.Data.CustomField
-                                                {
-                                                    DefinitionId = "2",
-                                                    Name = "Invoice Sent SyncToken",
-                                                    Type =CustomFieldTypeEnum.StringType,
-                                                    AnyIntuitObject = (Convert.ToInt32(syncToken) + 1).ToString()
-                                                }
-                                            }.ToArray(),
+                                                        {
+                                                            new Intuit.Ipp.Data.CustomField
+                                                            {
+                                                                DefinitionId = "3",
+                                                                Name = "EInvoice Validation Status",
+                                                                Type =CustomFieldTypeEnum.StringType,
+                                                                AnyIntuitObject = "Invoice Resent Success"
+                                                            },
+                                                            new Intuit.Ipp.Data.CustomField
+                                                            {
+                                                                DefinitionId = "2",
+                                                                Name = "Invoice Sent SyncToken",
+                                                                Type =CustomFieldTypeEnum.StringType,
+                                                                AnyIntuitObject = (Convert.ToInt32(syncToken) + 1).ToString()
+                                                            }
+                                                        }.ToArray(),
                                                         CustomerRef = originalInvoice.CustomerRef,
                                                         Line = originalInvoice.Line
                                                     };
@@ -369,15 +331,15 @@ namespace EInvoiceQuickBooks.Services
                                                         sparse = true,
                                                         BillEmail = originalInvoice.BillEmail,
                                                         CustomField = new List<Intuit.Ipp.Data.CustomField>
-                                            {
-                                                new Intuit.Ipp.Data.CustomField
-                                                {
-                                                    DefinitionId = "3",
-                                                    Name = "EInvoice Validation Status",
-                                                    Type =CustomFieldTypeEnum.StringType,
-                                                    AnyIntuitObject = "Invoice Resent Failure"
-                                                }
-                                            }.ToArray(),
+                                                        {
+                                                            new Intuit.Ipp.Data.CustomField
+                                                            {
+                                                                DefinitionId = "3",
+                                                                Name = "EInvoice Validation Status",
+                                                                Type =CustomFieldTypeEnum.StringType,
+                                                                AnyIntuitObject = "Invoice Resent Failure"
+                                                            }
+                                                        }.ToArray(),
                                                         CustomerRef = originalInvoice.CustomerRef,
                                                         Line = originalInvoice.Line
                                                     };
@@ -397,7 +359,6 @@ namespace EInvoiceQuickBooks.Services
                             }
                             else if (operation == "Delete")
                             {
-                                //token = await invoiceService.GetQuickBooksLoginDataAsync(clientId, clientKey, realmId);
                                 var checkExists = await invoiceService.CheckAlreadyExists(invoiceId, token);
 
                                 if (checkExists == 1)
@@ -408,7 +369,7 @@ namespace EInvoiceQuickBooks.Services
                                         var dbInvoice = await invoiceService.GetDBInvoice(invoiceId, token, -1, dummyEmail);
 
                                         var createRes = await invoiceService.CreateOrUpdateInvoice(dbInvoice, realmId);
-                                        if (createRes.Status.ToLower() == "success")
+                                        if (createRes?.Status?.ToLower() == "success")
                                         {
                                             var sendEmailRes = await invoiceService.SendInvoiceEmailAsync(createRes.Data.Id, realmId);
 
@@ -416,7 +377,7 @@ namespace EInvoiceQuickBooks.Services
                                             Log.Information($"Cannot Delete invoice once sent to Tax Office. Created back Invoice - {createRes.Data.Id}.");
                                         }
                                     }
-                                    catch (Exception ex)
+                                    catch (Exception)
                                     {
                                         Console.WriteLine($"Exception in Delete-Create-Back Invoice - {invoiceId}.");
                                         Log.Information($"Exception in Delete-Create-Back Invoice - {invoiceId}.");
@@ -445,22 +406,22 @@ namespace EInvoiceQuickBooks.Services
                                             Address = dummyEmail
                                         },
                                         CustomField = new List<Intuit.Ipp.Data.CustomField>
-                                    {
-                                        new Intuit.Ipp.Data.CustomField
                                         {
-                                            DefinitionId = "3",
-                                            Name = "EInvoice Validation Status",
-                                            Type =CustomFieldTypeEnum.StringType,
-                                            AnyIntuitObject = "Invoice Created"
-                                        },
-                                        new Intuit.Ipp.Data.CustomField
-                                        {
-                                            DefinitionId = "1",
-                                            Name = "Original Email",
-                                            Type = CustomFieldTypeEnum.StringType,
-                                            AnyIntuitObject = !String.IsNullOrEmpty(originalInvoice.BillEmail?.Address) ?originalInvoice.BillEmail?.Address : dummyEmail,
-                                        }
-                                    }.ToArray(),
+                                            new Intuit.Ipp.Data.CustomField
+                                            {
+                                                DefinitionId = "3",
+                                                Name = "EInvoice Validation Status",
+                                                Type =CustomFieldTypeEnum.StringType,
+                                                AnyIntuitObject = "Invoice Created"
+                                            },
+                                            new Intuit.Ipp.Data.CustomField
+                                            {
+                                                DefinitionId = "1",
+                                                Name = "Original Email",
+                                                Type = CustomFieldTypeEnum.StringType,
+                                                AnyIntuitObject = !String.IsNullOrEmpty(originalInvoice.BillEmail?.Address) ?originalInvoice.BillEmail?.Address : dummyEmail,
+                                            }
+                                        }.ToArray(),
                                         CustomerRef = originalInvoice.CustomerRef,
                                         Line = originalInvoice.Line
                                     };
@@ -495,15 +456,15 @@ namespace EInvoiceQuickBooks.Services
                                                 Address = dummyEmail
                                             },
                                             CustomField = new List<Intuit.Ipp.Data.CustomField>
-                                    {
-                                        new Intuit.Ipp.Data.CustomField
-                                        {
-                                            DefinitionId = "3",
-                                            Name = "EInvoice Validation Status",
-                                            Type =CustomFieldTypeEnum.StringType,
-                                            AnyIntuitObject = "Invoice Updated"
-                                        }
-                                    }.ToArray(),
+                                            {
+                                                new Intuit.Ipp.Data.CustomField
+                                                {
+                                                    DefinitionId = "3",
+                                                    Name = "EInvoice Validation Status",
+                                                    Type =CustomFieldTypeEnum.StringType,
+                                                    AnyIntuitObject = "Invoice Updated"
+                                                }
+                                            }.ToArray(),
                                             CustomerRef = originalInvoice.CustomerRef,
                                             Line = originalInvoice.Line
                                         };
@@ -524,7 +485,7 @@ namespace EInvoiceQuickBooks.Services
             catch (Exception ex)
             {
                 Log.Information($"An error occured in ProcessInvoiceEmailedEventAsync :{ex}");
-                throw ex;
+                throw;
             }
         }
 
@@ -561,7 +522,12 @@ namespace EInvoiceQuickBooks.Services
                     else
                     {
                         var company = await invoiceService.GetCompanyInfo(realmId);
-                        var req = GetBaseInvoiceRequest(originalInvoice, company);
+
+                        var lhdnCompany = await invoiceService.GetLhdnCompanyInfo(tokenResp);
+                        var lhdnParticipent = await invoiceService.GetCustomerDetails(tokenResp, originalEmail);
+
+                        var req = GetBaseInvoiceRequest(originalInvoice, company, lhdnCompany, lhdnParticipent);
+
                         string submitResp;
                         var count = 0;
 
@@ -614,7 +580,7 @@ namespace EInvoiceQuickBooks.Services
 
         #region LHDN eInvoice Create Request-Body Formation
 
-        private InvoiceRequest GetBaseInvoiceRequest(Invoice invoice, Company company)
+        private InvoiceRequest GetBaseInvoiceRequest(Invoice invoice, Company company, LhdnCompany lhdnCompany, LhdnParticipant lhdnParticipent)
         {
             return new InvoiceRequest
             {
@@ -626,56 +592,58 @@ namespace EInvoiceQuickBooks.Services
                 eInvoiceTime = DateTime.Now.ToString("HH:mm:ss") + "Z",//"03:16:56Z",
                 InvoiceCurrencyCode = invoice.CurrencyRef.Value, //"MYR",
                 //CurrencyExchangeRate = "1.00000", // No need
-                //PaymentMode = "03",
-                //PaymentTerms = "30 days from invoice date",
-                //PaymentDueDate = invoice.DueDate.ToString("yyyy-MM-dd"),//"2024-01-28",
-                BillReferenceNumber = "PO NO: 3261164188", //To cehck imp
-                SellerBankAccountNumber = "MBBEMYKL#514356100499", //To cehck imp
-                SellerName = company.CompanyName,  
-                SellerTIN = "C26072927020", //To cehck imp
-                SellerCategory = "BRN",   //To cehck
-                SellerBusinessRegistrationNumber = "201901029037", //To cehck imp not static
-                SellerSSTRegistrationNumber = "NA",  //To cehck imp not static
-                SellerEmail = company.Email?.Address,//company
-                SellerMalaysiaStandardIndustrialClassificationCode = "30910",  // from company
-                SellerContactNumber = !string.IsNullOrEmpty(company.Mobile?.FreeFormNumber) ? company.Mobile.FreeFormNumber
-                                    : !string.IsNullOrEmpty(company.PrimaryPhone?.FreeFormNumber) ? company.PrimaryPhone.FreeFormNumber : "",
-                SellerAddressLine0 = company.LegalAddr?.Line1,
-                SellerAddressLine1 = company.LegalAddr?.Line2,
-                SellerAddressLine2 = company.LegalAddr?.Line3,
-                SellerPostalZone = company.LegalAddr?.PostalCode,
-                SellerCityName = company.LegalAddr?.City,
-                SellerState = "14", //company.LegalAddr?.CountrySubDivisionCode ?? " ", //To check from company
-                SellerCountry = "MYS",//company.Country ?? "MYS",    //To check from company
-                SellerBusinessActivityDescription = "MEDICAL LABORATORIES",  //To check from company not required 
-                SellerMSIC = "46201", // to check imp
-                BuyerName = invoice.CustomerRef.Value,
-                BuyerTIN = "C20307408040",  // to check imp
-                BuyerCategory = "BRN",  // to check imp
-                BuyerBusinessRegistrationNumber = "200601028904",   // to check imp
-                BuyerIdentificationNumberOrPassportNumber = null,   // to check imp
-                BuyerSSTRegistrationNumber = "B10-1808-22000011",   // to check imp
-                BuyerEmail = invoice.CustomField.Where(c => c.DefinitionId == "1" && c.AnyIntuitObject != null).Select(c => c.AnyIntuitObject.ToString()).FirstOrDefault() ?? dummyEmail,
-                BuyerContactNumber = "16097995959", // to check imp not required but check
-                BuyerAddressLine0 = !string.IsNullOrEmpty(invoice.BillAddr.Line1) ? invoice.BillAddr.Line1 : "Line 1",
-                BuyerAddressLine1 = invoice.BillAddr?.Line2,
-                BuyerAddressLine2 = invoice.BillAddr?.Line3,
-                BuyerPostalZone = invoice.BillAddr?.PostalCode,
-                BuyerCityName = invoice.BillAddr?.City,
-                BuyerState = "14",//invoice.BillAddr?.CountrySubDivisionCode ?? // to check imp
-                BuyerCountry = "MYS",//invoice.BillAddr?.Country ??     // to check imp
+                PaymentMode = lhdnCompany.PaymentMeansCode,
+                PaymentTerms = lhdnCompany.DefaultPaymentTerms,
+                //PaymentDueDate = invoice.DueDate.ToString("yyyy-MM-dd"), // No need
+                BillReferenceNumber = null,
+                SellerBankAccountNumber = null,
+                SellerName = company.CompanyName,
+                SellerTIN = lhdnCompany.Tin,
+                SellerCategory = lhdnCompany.IdType, //idType
+                SellerBusinessRegistrationNumber = lhdnCompany.IdType == "BRN" ? lhdnCompany.IdValue : null, //idValue 
+                SellerSSTRegistrationNumber = lhdnCompany.IdType == "SST" ? lhdnCompany.IdValue : null, //idValue 
+                SellerEmail = lhdnCompany.Email,
+                SellerMalaysiaStandardIndustrialClassificationCode = lhdnCompany.ClassificationCode,
+                SellerContactNumber = lhdnCompany.Telephone,
+                SellerAddressLine0 = lhdnCompany.AddressLine1,
+                SellerAddressLine1 = lhdnCompany.AddressLine2,
+                SellerAddressLine2 = lhdnCompany.AddressLine3,
+                SellerPostalZone = lhdnCompany.PostalZone,
+                SellerCityName = lhdnCompany.City,
+                SellerState = lhdnCompany.State,
+                SellerCountry = lhdnCompany.Country,
+                SellerBusinessActivityDescription = null,
+                SellerMSIC = null,
+                BuyerName = lhdnParticipent.ParticipantName,
+                BuyerTIN = lhdnParticipent.Tin,
+                BuyerCategory = lhdnParticipent.CbcBCategory,
+                BuyerBusinessRegistrationNumber = lhdnParticipent.CbcBbrnNumber,
+                BuyerIdentificationNumberOrPassportNumber = null,
+                BuyerSSTRegistrationNumber = lhdnParticipent.SstRegnNo,
+                BuyerEmail = lhdnParticipent.Email,
+                BuyerContactNumber = lhdnParticipent.Phone,
+                BuyerAddressLine0 = lhdnParticipent.AddressLine1,
+                BuyerAddressLine1 = lhdnParticipent.AddressLine2,
+                BuyerAddressLine2 = lhdnParticipent.AddressLine3,
+                BuyerPostalZone = lhdnParticipent.PostalZone,
+                BuyerCityName = lhdnParticipent.City,
+                BuyerState = lhdnParticipent.State,
+                BuyerCountry = lhdnParticipent.Country,
 
-                SumOfInvoiceLineNetAmount = invoice.TotalAmt.ToString(), // to check imp
-                SumOfAllowancesOnDocumentLevel = "0.00",        // to check imp
+                SumOfInvoiceLineNetAmount = invoice.TotalAmt.ToString(), //without tax
+
+                SumOfAllowancesOnDocumentLevel = "0.00",
                 TotalFeeOrChargeAmount = "0.00",
-                TotalExcludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0",
-                TotalIncludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0",
+                TotalExcludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0", //SumOfInvoiceLineNetAmount
+                TotalIncludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0", //SumOfInvoiceLineNetAmount + tax
+
                 RoundingAmount = "0.02",
                 PaidAmount = "0.00",
-                TotalPayableAmount = invoice.TotalAmt.ToString("0.0") ?? "0.0",
+                TotalPayableAmount = invoice.TotalAmt.ToString("0.0") ?? "0.0", //TotalIncludingTax
+
                 ReferenceNumberOfCustomsFormNo1ID = null,
                 ReferenceNumberOfCustomsFormNo1DocumentType = null,
-                Incoterms = "DDP",
+                Incoterms = null, //"DDP",
                 FreeTradeAgreementDocumentType = null,
                 FreeTradeAgreementID = null,
                 FreeTradeAgreementDocumentDescription = null,
@@ -687,28 +655,114 @@ namespace EInvoiceQuickBooks.Services
                 DetailsOfOtherChargesChargeIndicator = null,
                 DetailsOfOtherChargesAmount = null,
                 DetailsOfOtherChargesAllowanceChargeReason = null,
-                TotalNetAmount = invoice.TotalAmt.ToString("0.0") ?? "0.0",
+
+                TotalNetAmount = invoice.TotalAmt.ToString("0.0") ?? "0.0", //TotalIncludingTax
+
                 InvoiceLine = GetLines(invoice),
                 isPDF = false,
                 OutputFormat = "json",
                 SourceName = "Advintek_Aif",
                 SourceFileName = "Advintek_Aif12",
-                TaxOfficeSchedulerTemplateName = "Invoice Template",
-                TemplateName = "PDF_Telis_inv",
+                TaxOfficeSchedulerTemplateName = "",
+                TemplateName = "",
                 QuickBookDetails = GetQuickBookDetails(invoice),
-                DocTaxTotal = new DocTaxTotal
-                {
-                    TaxCategoryTaxAmountInAccountingCurrency = "0.00",
-                    TotalTaxableAmountPerTaxType = "0.00",
-                    TaxCategoryId = "06",
-                    TaxCategoryTaxSchemeId = "UN/ECE 5153",
-                    TaxCategorySchemeAgencyID = "6",
-                    TaxCategorySchemeAgencyCode = "OTH",
-                    TaxCategoryRate = "0.0",
-                    DetailsOfTaxExemption = ""
-                },
+                DocTaxTotal = GetDocTaxTotal(invoice),
                 AllowanceCharges = new List<AllowanceCharge>()
             };
+        }
+
+        private DocTaxTotal GetDocTaxTotal(Invoice invoice)
+        {
+            var taxDetail = invoice.TxnTaxDetail.TaxLine.FirstOrDefault().AnyIntuitObject;
+            string totalTaxableAmountPerTaxType = "";
+            string taxCategoryId = "";
+            decimal taxPercent = 0.0m;
+
+            if (taxDetail is TaxLineDetail taxLineDetail)
+            {
+                // Extract UnitPrice if available
+                if (taxLineDetail.NetAmountTaxable is decimal netAmountTaxable)
+                {
+                    totalTaxableAmountPerTaxType = netAmountTaxable.ToString();
+                }
+
+                if (taxLineDetail.TaxRateRef is ReferenceType taxRateRef)
+                {
+                    taxCategoryId = taxRateRef.Value;
+                }
+                if (taxLineDetail.TaxPercent is decimal taxpercent)
+                {
+                    taxPercent = taxpercent;
+                }
+            }
+            var txnTaxCodeRef = GetTxnTaxCodeRef(invoice.TxnTaxDetail.TxnTaxCodeRef);
+
+            return new DocTaxTotal
+            {
+                TaxCategoryTaxAmountInAccountingCurrency = GetTaxCategoryTaxAmount(invoice.TotalAmt, taxPercent), //"80"
+                TotalTaxableAmountPerTaxType = totalTaxableAmountPerTaxType, //"1080.00",
+                TaxCategoryId = GetTaxCategoryId(txnTaxCodeRef), //"06",
+                TaxCategoryTaxSchemeId = "UN/ECE 5153",
+                TaxCategorySchemeAgencyID = "6",
+                TaxCategorySchemeAgencyCode = "OTH",
+                TaxCategoryRate = taxPercent.ToString(),
+                DetailsOfTaxExemption = ""
+            };
+        }
+
+        private string GetTxnTaxCodeRef(ReferenceType txnTaxCodeRef)
+        {
+            switch (txnTaxCodeRef.Value)
+            {
+                case "4":
+                    return "SST - Sales Tax";
+                case "5":
+                    return "SST - Service Tax";
+                case "6":
+                    return "SST - Tourism Tax";
+                case "7":
+                    return "SST - High-Value Goods Tax - Inactive";
+                case "8":
+                    return "SST - High-Value Goods Tax";
+                case "9":
+                    return "SST - Sales Tax on Low Value Goods";
+                case "10":
+                    return "SST - Not Applicable";
+                case "E":
+                case "11":
+                    return "SST - Tax exemption";
+                default:
+                    return "NON";
+            }
+        }
+
+        private string GetTaxCategoryId(string value)
+        {
+            switch (value)
+            {
+                case "SST - High-Value Goods Tax":
+                    return "04";
+                case "SST - Not Applicable":
+                    return "06";
+                case "SST - Sales Tax":
+                    return "01";
+                case "SST - Sales Tax on Low Value Goods":
+                    return "05";
+                case "SST - Service Tax":
+                    return "02";
+                case "SST - Tax exemption":
+                    return "E";
+                case "SST - Tourism Tax":
+                    return "03";
+                default:
+                    return "Unknown"; // Handle unexpected input
+            }
+        }
+
+        private string GetTaxCategoryTaxAmount(decimal totalAmt, decimal taxPercent)
+        {
+            var res = totalAmt * (taxPercent / 100);
+            return res.ToString();
         }
 
         private List<Models1.LineItem> GetLines(Invoice invoice)
@@ -721,29 +775,48 @@ namespace EInvoiceQuickBooks.Services
             {
                 var line = invoice.Line[i];
 
+                string unitPrice = "0";
+                string quantity = "0";
+
+                if (line.AnyIntuitObject is SalesItemLineDetail salesItemLineDetail)
+                {
+                    // Extract UnitPrice if available
+                    if (salesItemLineDetail.AnyIntuitObject is decimal price)
+                    {
+                        unitPrice = price.ToString();
+                    }
+
+                    if (salesItemLineDetail.Qty is decimal Qty)
+                    {
+                        quantity = Qty.ToString();
+                    }
+                }
+
                 res.Add(new Models1.LineItem
                 {
                     LineId = String.IsNullOrEmpty(line.Id) ? i.ToString() : line.Id,
                     ClassificationClass = "CLASS",
                     ClassificationCode = "022",
-                    ProductID = string.IsNullOrEmpty(line.DetailType.GetStringValue()) ? "Latex" : line.DetailType.GetStringValue(),
+                    ProductID = line.Id,
                     Description = String.IsNullOrEmpty(line.Description) ? "description" : line.Description,
-                    ProductTariffCode = "4001.10.00",
-                    ProductTariffClass = "PTC",
-                    Country = "THA",
-                    UnitPrice = line.Amount.ToString() ?? "0",
-                    Quantity = "0",
-                    Measurement = "WE",
-                    Subtotal = invoice.TotalAmt.ToString() ?? "0",
+                    ProductTariffCode = null,
+                    ProductTariffClass = null,
+                    Country = invoice.BillAddr.County,
+                    UnitPrice = unitPrice,
+                    Quantity = quantity,
+
+                    Measurement = null,//Tocheck
+
+                    Subtotal = invoice.TotalAmt.ToString() ?? "0",//UnitPrice * Quantity + TaxAmount
                     SSTTaxCategory = null,
                     TaxType = "06",//invoice.TxnTaxDetail?.TxnTaxCodeRef?.Value ??
                     TaxRate = "0.0",
-                    TaxAmount = invoice.TxnTaxDetail?.TotalTax.ToString() ?? "0",
+                    TaxAmount = "0",
                     DetailsOfTaxExemption = null,
                     AmountExemptedFromTax = null,
-                    TotalExcludingTax = invoice.TotalAmt.ToString("0.00"),
-                    InvoiceLineNetAmount = invoice.TotalAmt.ToString("0.00"),
-                    NettAmount = invoice.TotalAmt.ToString("0.00"),
+                    TotalExcludingTax = invoice.TotalAmt.ToString("0.00"),//Subtotal
+                    InvoiceLineNetAmount = invoice.TotalAmt.ToString("0.00"),//Subtotal
+                    NettAmount = invoice.TotalAmt.ToString("0.00"),//Subtotal
                     TaxCategorySchemeID = "UN/ECE 5153",
                     TaxCategorySchemeAgencyID = "6",
                     TaxCategorySchemeAgencyCode = "OTH"
