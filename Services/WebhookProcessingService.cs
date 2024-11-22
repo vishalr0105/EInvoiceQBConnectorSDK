@@ -3,8 +3,6 @@ using EInvoiceQuickBooks.Models1;
 using Intuit.Ipp.Data;
 using Intuit.Ipp.WebhooksService;
 using Newtonsoft.Json;
-using Intuit.Ipp.OAuth2PlatformClient;
-using Intuit.Ipp.Diagnostics;
 using Serilog;
 
 namespace EInvoiceQuickBooks.Services

@@ -1,6 +1,4 @@
-﻿using Intuit.Ipp.Data;
-
-namespace EInvoiceQuickBooks.Models
+﻿namespace EInvoiceQuickBooks.Models
 {
     public class CreateOrUpdateInvoiceResponse
     {
