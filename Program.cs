@@ -15,21 +15,6 @@ Log.Logger = new LoggerConfiguration()
              .WriteTo.File("log/quickbookslog.txt", rollingInterval: RollingInterval.Day, retainedFileCountLimit: null)
              .CreateLogger();
 
-// Add configuration with reloadOnChange enabled
-//builder.Configuration.SetBasePath(Directory.GetCurrentDirectory())
-//                     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-//                     .AddEnvironmentVariables();
-
-//var configuration = new ConfigurationBuilder()
-//    .SetBasePath(AppContext.BaseDirectory)
-//    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-//    .Build();
-//var logDirectory = Path.Combine(AppContext.BaseDirectory, configuration["Logger:RequestLog:LogDirectory"]);
-//if (!Directory.Exists(logDirectory))
-//{
-//    Directory.CreateDirectory(logDirectory);
-//}
-
 builder.Services.AddSingleton<IQueueService, InMemoryQueueService>();
 builder.Services.AddHostedService<WebhookProcessingService>();
 builder.Services.AddScoped<InvoiceService>();
