@@ -1,8 +1,10 @@
 ﻿using EInvoiceQuickBooks.Models;
 using EInvoiceQuickBooks.Models1;
 using Intuit.Ipp.Data;
+using Intuit.Ipp.Exception;
 using Intuit.Ipp.WebhooksService;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Serilog;
 
 namespace EInvoiceQuickBooks.Services
@@ -76,6 +78,7 @@ namespace EInvoiceQuickBooks.Services
             _timer?.Dispose();
             base.Dispose();
         }
+
         private async System.Threading.Tasks.Task ProcessInvoiceEmailedEventAsync(string payload)
         {
             // Create a new scope to resolve scoped services
@@ -116,6 +119,17 @@ namespace EInvoiceQuickBooks.Services
                                     {
                                         var res = await ProcessMethod(originalInvoice, invoiceId, check, realmId);
 
+                                        if (res.Contains("Value cannot be null."))
+                                        {
+                                            Log.Error("Getting \"Value cannot be null.\" error in Process method.");
+                                            return;
+                                        }
+                                        else if (res.ToLower().Contains("exception"))
+                                        {
+                                            Log.Error($"Getting Exception in Process method");
+                                            return;
+                                        }
+
                                         Invoice updateInvoiceInput = new Invoice();
                                         if (res.ToLower() == "success" || res.Contains("A LongId was not found for this UUID"))
                                         {
@@ -130,7 +144,7 @@ namespace EInvoiceQuickBooks.Services
                                                 {
                                                     new Intuit.Ipp.Data.CustomField
                                                     {
-                                                        DefinitionId = "3",
+                                                        DefinitionId = "2",
                                                         Name = "EInvoice Validation Status",
                                                         Type =CustomFieldTypeEnum.StringType,
                                                         AnyIntuitObject = statusToPass
@@ -159,7 +173,7 @@ namespace EInvoiceQuickBooks.Services
                                                 {
                                                     new Intuit.Ipp.Data.CustomField
                                                     {
-                                                        DefinitionId = "3",
+                                                        DefinitionId = "2",
                                                         Name = "EInvoice Validation Status",
                                                         Type =CustomFieldTypeEnum.StringType,
                                                         AnyIntuitObject = "Invoice Sent Failure"
@@ -176,12 +190,12 @@ namespace EInvoiceQuickBooks.Services
                                             {
                                                 if (res == "success")
                                                 {
-                                                    Log.Information($"Invoice Resent successfully - {invoiceId}");
+                                                    Log.Information($"Invoice sent successfully - {invoiceId}");
                                                     Console.WriteLine($"Invoice Resent successfully - {invoiceId}");
                                                 }
                                                 else if (res == "failure")
                                                 {
-                                                    Log.Information($"Invoice Resent failure - {invoiceId}");
+                                                    Log.Information($"Invoice sent failure - {invoiceId}");
                                                     Console.WriteLine($"Invoice Resent failure - {invoiceId}");
                                                 }
                                                 else
@@ -206,7 +220,16 @@ namespace EInvoiceQuickBooks.Services
                                         if (originalInvoiceSyncToken == lastSyncToken)
                                         {
                                             var res = await ProcessMethod(originalInvoice, invoiceId, check, realmId);
-
+                                            if (res.Contains("Value cannot be null."))
+                                            {
+                                                Log.Error("Getting \"Value cannot be null.\" error in Process method.");
+                                                return;
+                                            }
+                                            else if (res.ToLower().Contains("exception"))
+                                            {
+                                                Log.Error($"Getting Exception in Process method");
+                                                return;
+                                            }
                                             Invoice updateInvoiceInput = new Invoice();
 
                                             if (res.ToLower() == "success" || res.Contains("A LongId was not found for this UUID"))
@@ -221,7 +244,7 @@ namespace EInvoiceQuickBooks.Services
                                                     {
                                                         new Intuit.Ipp.Data.CustomField
                                                         {
-                                                            DefinitionId = "3",
+                                                            DefinitionId = "2",
                                                             Name = "EInvoice Validation Status",
                                                             Type =CustomFieldTypeEnum.StringType,
                                                             AnyIntuitObject = "Invoice Resent Success"
@@ -250,7 +273,7 @@ namespace EInvoiceQuickBooks.Services
                                                     {
                                                         new Intuit.Ipp.Data.CustomField
                                                         {
-                                                            DefinitionId = "3",
+                                                            DefinitionId = "2",
                                                             Name = "EInvoice Validation Status",
                                                             Type =CustomFieldTypeEnum.StringType,
                                                             AnyIntuitObject = "Invoice Resent Failure"
@@ -288,6 +311,16 @@ namespace EInvoiceQuickBooks.Services
                                             if (createRes?.Status?.ToLower() == "success")
                                             {
                                                 var res = await ProcessMethod(originalInvoice, invoiceId, check, realmId);
+                                                if (res.Contains("Value cannot be null."))
+                                                {
+                                                    Log.Error("Getting \"Value cannot be null.\" error in Process method.");
+                                                    return;
+                                                }
+                                                else if (res.ToLower().Contains("exception"))
+                                                {
+                                                    Log.Error($"Getting Exception in Process method");
+                                                    return;
+                                                }
 
                                                 Invoice updateInvoiceInput = new Invoice();
 
@@ -303,7 +336,7 @@ namespace EInvoiceQuickBooks.Services
                                                         {
                                                             new Intuit.Ipp.Data.CustomField
                                                             {
-                                                                DefinitionId = "3",
+                                                                DefinitionId = "2",
                                                                 Name = "EInvoice Validation Status",
                                                                 Type =CustomFieldTypeEnum.StringType,
                                                                 AnyIntuitObject = "Invoice Resent Success"
@@ -332,7 +365,7 @@ namespace EInvoiceQuickBooks.Services
                                                         {
                                                             new Intuit.Ipp.Data.CustomField
                                                             {
-                                                                DefinitionId = "3",
+                                                                DefinitionId = "2",
                                                                 Name = "EInvoice Validation Status",
                                                                 Type =CustomFieldTypeEnum.StringType,
                                                                 AnyIntuitObject = "Invoice Resent Failure"
@@ -407,7 +440,7 @@ namespace EInvoiceQuickBooks.Services
                                         {
                                             new Intuit.Ipp.Data.CustomField
                                             {
-                                                DefinitionId = "3",
+                                                DefinitionId = "2",
                                                 Name = "EInvoice Validation Status",
                                                 Type =CustomFieldTypeEnum.StringType,
                                                 AnyIntuitObject = "Invoice Created"
@@ -457,7 +490,7 @@ namespace EInvoiceQuickBooks.Services
                                             {
                                                 new Intuit.Ipp.Data.CustomField
                                                 {
-                                                    DefinitionId = "3",
+                                                    DefinitionId = "2",
                                                     Name = "EInvoice Validation Status",
                                                     Type =CustomFieldTypeEnum.StringType,
                                                     AnyIntuitObject = "Invoice Updated"
@@ -482,7 +515,7 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
-                Log.Information($"An error occured in ProcessInvoiceEmailedEventAsync :{ex}");
+                Log.Information($"An error occured in ProcessInvoiceEmailedEventAsync :{JsonConvert.SerializeObject(ex)}");
                 throw;
             }
         }
@@ -523,6 +556,11 @@ namespace EInvoiceQuickBooks.Services
 
                         var lhdnCompany = await invoiceService.GetLhdnCompanyInfo(tokenResp);
                         var lhdnParticipent = await invoiceService.GetCustomerDetails(tokenResp, originalEmail);
+                        if (lhdnCompany == null || lhdnParticipent == null)
+                        {
+                            Log.Information($"Exception in Getting LHDN CompanyInfo/CustomerDetails");
+                            return "exception"; 
+                        }
 
                         var req = GetBaseInvoiceRequest(originalInvoice, company, lhdnCompany, lhdnParticipent);
 
@@ -552,11 +590,16 @@ namespace EInvoiceQuickBooks.Services
                         {
                             return "validation error";
                         }
-                        if (submitResp.Contains("\"statusCode\":400"))
+                        else if (submitResp.Contains("\"statusCode\":400"))
                         {
                             return $"A LongId was not found for this UUID";
                         }
-
+                        else if (!submitResp.ToLower().Contains("exception"))
+                        {
+                            return "exception";
+                        }
+                        var jsonrequest = JObject.FromObject(req);
+                        var sjkfnf = jsonrequest.ToString();
                         resProcessInvoice = await invoiceService.ProcessInvoiceMethod(requestProgress, tokenResp);
                     }
 
@@ -570,7 +613,8 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
-                return ex.Message;
+                Log.Error($"Exception in ProcessMethod - {JsonConvert.SerializeObject(ex)}");
+                return "exception";
             }
         }
 
@@ -580,98 +624,110 @@ namespace EInvoiceQuickBooks.Services
 
         private InvoiceRequest GetBaseInvoiceRequest(Invoice invoice, Company company, LhdnCompany lhdnCompany, LhdnParticipant lhdnParticipent)
         {
-            return new InvoiceRequest
+            try
             {
-                eInvoiceVersion = "1.0",//static
-                eInvoiceTypeCode = "01",//static
-                eInvoiceCodeOrNumber = invoice.Id,
-                SourceInvoiceNumber = invoice.Id,
-                eInvoiceDate = DateTime.Now.ToString("yyyy-MM-dd"),//"2023-12-29",
-                eInvoiceTime = DateTime.Now.ToString("HH:mm:ss") + "Z",//"03:16:56Z",
-                InvoiceCurrencyCode = invoice.CurrencyRef.Value, //"MYR",
-                //CurrencyExchangeRate = "1.00000", // No need
-                PaymentMode = lhdnCompany.PaymentMeansCode,
-                PaymentTerms = lhdnCompany.DefaultPaymentTerms,
-                //PaymentDueDate = invoice.DueDate.ToString("yyyy-MM-dd"), // No need
-                BillReferenceNumber = null,
-                SellerBankAccountNumber = null,
-                SellerName = company.CompanyName,
-                SellerTIN = lhdnCompany.Tin,
-                SellerCategory = lhdnCompany.IdType, //idType
-                SellerBusinessRegistrationNumber = lhdnCompany.IdType == "BRN" ? lhdnCompany.IdValue : null, //idValue 
-                SellerSSTRegistrationNumber = lhdnCompany.IdType == "SST" ? lhdnCompany.IdValue : null, //idValue 
-                SellerEmail = lhdnCompany.Email,
-                SellerMalaysiaStandardIndustrialClassificationCode = lhdnCompany.ClassificationCode,
-                SellerContactNumber = lhdnCompany.Telephone,
-                SellerAddressLine0 = lhdnCompany.AddressLine1,
-                SellerAddressLine1 = lhdnCompany.AddressLine2,
-                SellerAddressLine2 = lhdnCompany.AddressLine3,
-                SellerPostalZone = lhdnCompany.PostalZone,
-                SellerCityName = lhdnCompany.City,
-                SellerState = lhdnCompany.State,
-                SellerCountry = lhdnCompany.Country,
-                SellerBusinessActivityDescription = null,
-                SellerMSIC = null,
-                BuyerName = lhdnParticipent.ParticipantName,
-                BuyerTIN = lhdnParticipent.Tin,
-                BuyerCategory = lhdnParticipent.CbcBCategory,
-                BuyerBusinessRegistrationNumber = lhdnParticipent.CbcBbrnNumber,
-                BuyerIdentificationNumberOrPassportNumber = null,
-                BuyerSSTRegistrationNumber = lhdnParticipent.SstRegnNo,
-                BuyerEmail = lhdnParticipent.Email,
-                BuyerContactNumber = lhdnParticipent.Phone,
-                BuyerAddressLine0 = lhdnParticipent.AddressLine1,
-                BuyerAddressLine1 = lhdnParticipent.AddressLine2,
-                BuyerAddressLine2 = lhdnParticipent.AddressLine3,
-                BuyerPostalZone = lhdnParticipent.PostalZone,
-                BuyerCityName = lhdnParticipent.City,
-                BuyerState = lhdnParticipent.State,
-                BuyerCountry = lhdnParticipent.Country,
+                return new InvoiceRequest
+                {
+                    eInvoiceVersion = "1.0",//static
+                    eInvoiceTypeCode = "01",//static
+                    eInvoiceCodeOrNumber = invoice.Id,
+                    SourceInvoiceNumber = invoice.Id,
+                    eInvoiceDate = DateTime.Now.ToString("yyyy-MM-dd"),//"2023-12-29",
+                    eInvoiceTime = DateTime.Now.ToString("HH:mm:ss") + "Z",//"03:16:56Z",
+                    InvoiceCurrencyCode = invoice.CurrencyRef.Value, //"MYR",
+                                                                     //CurrencyExchangeRate = "1.00000", // No need
+                    PaymentMode = lhdnCompany.PaymentMeansCode,
+                    PaymentTerms = lhdnCompany.DefaultPaymentTerms,
+                    //PaymentDueDate = invoice.DueDate.ToString("yyyy-MM-dd"), // No need
+                    BillReferenceNumber = null,
+                    SellerBankAccountNumber = null,
+                    SellerName = company.CompanyName,
+                    SellerTIN = lhdnCompany.Tin,
+                    SellerCategory = lhdnCompany.IdType, //idType
+                    SellerBusinessRegistrationNumber = lhdnCompany.IdType == "BRN" ? lhdnCompany.IdValue : null, //idValue 
+                    SellerSSTRegistrationNumber = lhdnCompany.IdType == "SST" ? lhdnCompany.IdValue : null, //idValue 
+                    SellerEmail = lhdnCompany.Email,
+                    SellerMalaysiaStandardIndustrialClassificationCode = lhdnCompany.ClassificationCode,
+                    SellerContactNumber = lhdnCompany.Telephone,
+                    SellerAddressLine0 = lhdnCompany.AddressLine1,
+                    SellerAddressLine1 = lhdnCompany.AddressLine2,
+                    SellerAddressLine2 = lhdnCompany.AddressLine3,
+                    SellerPostalZone = lhdnCompany.PostalZone,
+                    SellerCityName = lhdnCompany.City,
+                    SellerState = lhdnCompany.State,
+                    SellerCountry = lhdnCompany.Country,
+                    SellerBusinessActivityDescription = null,
+                    SellerMSIC = null,
+                    BuyerName = lhdnParticipent.ParticipantName,
+                    BuyerTIN = lhdnParticipent.Tin,
+                    BuyerCategory = lhdnParticipent.CbcBCategory,
+                    BuyerBusinessRegistrationNumber = lhdnParticipent.CbcBbrnNumber,
+                    BuyerIdentificationNumberOrPassportNumber = null,
+                    BuyerSSTRegistrationNumber = lhdnParticipent.SstRegnNo,
+                    BuyerEmail = lhdnParticipent.Email,
+                    BuyerContactNumber = lhdnParticipent.Phone,
+                    BuyerAddressLine0 = lhdnParticipent.AddressLine1,
+                    BuyerAddressLine1 = lhdnParticipent.AddressLine2,
+                    BuyerAddressLine2 = lhdnParticipent.AddressLine3,
+                    BuyerPostalZone = lhdnParticipent.PostalZone,
+                    BuyerCityName = lhdnParticipent.City,
+                    BuyerState = lhdnParticipent.State,
+                    BuyerCountry = lhdnParticipent.Country,
 
-                SumOfInvoiceLineNetAmount = invoice.TotalAmt.ToString(), //without tax
+                    SumOfInvoiceLineNetAmount = invoice.TotalAmt.ToString(), //without tax
 
-                SumOfAllowancesOnDocumentLevel = "0.00",
-                TotalFeeOrChargeAmount = "0.00",
-                TotalExcludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0", //SumOfInvoiceLineNetAmount
-                TotalIncludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0", //SumOfInvoiceLineNetAmount + tax
+                    SumOfAllowancesOnDocumentLevel = "0.00",
+                    TotalFeeOrChargeAmount = "0.00",
+                    TotalExcludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0", //SumOfInvoiceLineNetAmount
+                    TotalIncludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0", //SumOfInvoiceLineNetAmount + tax
 
-                RoundingAmount = "0.02",
-                PaidAmount = "0.00",
-                TotalPayableAmount = invoice.TotalAmt.ToString("0.0") ?? "0.0", //TotalIncludingTax
+                    RoundingAmount = "0.02",
+                    PaidAmount = "0.00",
+                    TotalPayableAmount = invoice.TotalAmt.ToString("0.0") ?? "0.0", //TotalIncludingTax
 
-                ReferenceNumberOfCustomsFormNo1ID = null,
-                ReferenceNumberOfCustomsFormNo1DocumentType = null,
-                Incoterms = null, //"DDP",
-                FreeTradeAgreementDocumentType = null,
-                FreeTradeAgreementID = null,
-                FreeTradeAgreementDocumentDescription = null,
-                AuthorisationNumberForCertifiedExporter = null,
-                AuthorisationNumberForCertifiedExporterAgencyName = null,
-                ReferenceNumberOfCustomsFormNo2ID = null,
-                ReferenceNumberOfCustomsFormNo2DocumentType = null,
-                DetailsOfOtherChargesID = null,
-                DetailsOfOtherChargesChargeIndicator = null,
-                DetailsOfOtherChargesAmount = null,
-                DetailsOfOtherChargesAllowanceChargeReason = null,
+                    ReferenceNumberOfCustomsFormNo1ID = null,
+                    ReferenceNumberOfCustomsFormNo1DocumentType = null,
+                    Incoterms = null, //"DDP",
+                    FreeTradeAgreementDocumentType = null,
+                    FreeTradeAgreementID = null,
+                    FreeTradeAgreementDocumentDescription = null,
+                    AuthorisationNumberForCertifiedExporter = null,
+                    AuthorisationNumberForCertifiedExporterAgencyName = null,
+                    ReferenceNumberOfCustomsFormNo2ID = null,
+                    ReferenceNumberOfCustomsFormNo2DocumentType = null,
+                    DetailsOfOtherChargesID = null,
+                    DetailsOfOtherChargesChargeIndicator = null,
+                    DetailsOfOtherChargesAmount = null,
+                    DetailsOfOtherChargesAllowanceChargeReason = null,
 
-                TotalNetAmount = invoice.TotalAmt.ToString("0.0") ?? "0.0", //TotalIncludingTax
+                    TotalNetAmount = invoice.TotalAmt.ToString("0.0") ?? "0.0", //TotalIncludingTax
 
-                InvoiceLine = GetLines(invoice),
-                isPDF = false,
-                OutputFormat = "json",
-                SourceName = "Advintek_Aif",
-                SourceFileName = "Advintek_Aif12",
-                TaxOfficeSchedulerTemplateName = "",
-                TemplateName = "",
-                QuickBookDetails = GetQuickBookDetails(invoice),
-                DocTaxTotal = GetDocTaxTotal(invoice),
-                AllowanceCharges = new List<AllowanceCharge>()
-            };
+                    InvoiceLine = GetLines(invoice, lhdnCompany),
+                    isPDF = false,
+                    OutputFormat = "json",
+                    SourceName = "Advintek_Aif",
+                    SourceFileName = "Advintek_Aif12",
+                    TaxOfficeSchedulerTemplateName = null,
+                    TemplateName = null,
+                    QuickBookDetails = GetQuickBookDetails(invoice),
+                    DocTaxTotal = GetDocTaxTotal(invoice),
+                    AllowanceCharges = new List<AllowanceCharge>()
+                };
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Exception in ProcessMethod->GetBaseInvoiceRequest - {JsonConvert.SerializeObject(ex)}");
+                throw;
+            }
         }
 
         private DocTaxTotal GetDocTaxTotal(Invoice invoice)
         {
-            var taxDetail = invoice.TxnTaxDetail.TaxLine.FirstOrDefault().AnyIntuitObject;
+            if (invoice.TxnTaxDetail?.TaxLine == null)
+            {
+                return new DocTaxTotal { };
+            }
+            var taxDetail = invoice.TxnTaxDetail?.TaxLine?.FirstOrDefault().AnyIntuitObject;
             string totalTaxableAmountPerTaxType = "";
             string taxCategoryId = "";
             decimal taxPercent = 0.0m;
@@ -693,7 +749,7 @@ namespace EInvoiceQuickBooks.Services
                     taxPercent = taxpercent;
                 }
             }
-            var txnTaxCodeRef = GetTxnTaxCodeRef(invoice.TxnTaxDetail.TxnTaxCodeRef);
+            var txnTaxCodeRef = GetTxnTaxCodeRef(invoice.TxnTaxDetail?.TxnTaxCodeRef);
 
             return new DocTaxTotal
             {
@@ -710,22 +766,48 @@ namespace EInvoiceQuickBooks.Services
 
         private string GetTxnTaxCodeRef(ReferenceType txnTaxCodeRef)
         {
+            #region guru@etaprise.com
+            //switch (txnTaxCodeRef.Value)
+            //{
+            //    case "4":
+            //        return "SST - Sales Tax";
+            //    case "5":
+            //        return "SST - Service Tax";
+            //    case "6":
+            //        return "SST - Tourism Tax";
+            //    case "7":
+            //        return "SST - High-Value Goods Tax - Inactive";
+            //    case "8":
+            //        return "SST - High-Value Goods Tax";
+            //    case "9":
+            //        return "SST - Sales Tax on Low Value Goods";
+            //    case "10":
+            //        return "SST - Not Applicable";
+            //    case "E":
+            //    case "11":
+            //        return "SST - Tax exemption";
+            //    default:
+            //        return "NON";
+            //}
+            #endregion
+
+            // accounting@nexright.com
             switch (txnTaxCodeRef.Value)
             {
                 case "4":
-                    return "SST - Sales Tax";
-                case "5":
-                    return "SST - Service Tax";
-                case "6":
-                    return "SST - Tourism Tax";
-                case "7":
-                    return "SST - High-Value Goods Tax - Inactive";
-                case "8":
                     return "SST - High-Value Goods Tax";
-                case "9":
-                    return "SST - Sales Tax on Low Value Goods";
-                case "10":
+                case "5":
                     return "SST - Not Applicable";
+                case "6":
+                    return "SST - Sales Tax";
+                case "7":
+                    return "SST - Sales Tax on Low Value Goods";
+                case "8":
+                    return "SST - Service Tax";
+                case "9":
+                    return "SST - Tax exemption";
+                case "10":
+                    return "SST - Tourism Tax";
                 case "E":
                 case "11":
                     return "SST - Tax exemption";
@@ -763,7 +845,7 @@ namespace EInvoiceQuickBooks.Services
             return res.ToString();
         }
 
-        private List<Models1.LineItem> GetLines(Invoice invoice)
+        private List<Models1.LineItem> GetLines(Invoice invoice, LhdnCompany lhdnCompany)
         {
             var lineCount = invoice.Line.Count();
 
@@ -799,7 +881,7 @@ namespace EInvoiceQuickBooks.Services
                     Description = String.IsNullOrEmpty(line.Description) ? "description" : line.Description,
                     ProductTariffCode = null,
                     ProductTariffClass = null,
-                    Country = invoice.BillAddr.County,
+                    Country = lhdnCompany.Country,
                     UnitPrice = unitPrice,
                     Quantity = quantity,
 

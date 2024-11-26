@@ -1,4 +1,5 @@
 ﻿using EInvoiceQuickBooks.Services;
+using Intuit.Ipp.Data;
 using Intuit.Ipp.WebhooksService;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
@@ -45,14 +46,23 @@ namespace EInvoiceQuickBooks.Controllers
                 }
 
                 using JsonDocument doc = JsonDocument.Parse(payloadString);
-                string operation = doc.RootElement
-                                      .GetProperty("eventNotifications")[0]
+
+                var operation = doc.RootElement.GetProperty("eventNotifications")[0]
                                       .GetProperty("dataChangeEvent")
                                       .GetProperty("entities")[0]
                                       .GetProperty("operation")
                                       .GetString();
 
-                if (operation == "Emailed" || operation == "Delete" || operation == "Create" || operation == "Update")
+                var entity = doc.RootElement.GetProperty("eventNotifications")[0]
+                                      .GetProperty("dataChangeEvent")
+                                      .GetProperty("entities")[0]
+                                      .GetProperty("name")
+                                      .GetString();
+
+                var operationList = new List<string>() { "Emailed", "Delete", "Create", "Update", "Void" };
+                var entityList = new List<string>() { "Invoice" };
+
+                if (operationList.Contains(operation) && entityList.Contains(entity))
                 {
                     _webhookProcessingService.Enqueue(payloadString);
                 }

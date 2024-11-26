@@ -109,8 +109,7 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
-                var jsonEx = JsonConvert.SerializeObject(ex);
-                Log.Information($"{jsonEx}");
+                Log.Information($"Exception in UpdateInvoice - {JsonConvert.SerializeObject(ex)}");
                 throw;
             }
         }
@@ -157,8 +156,7 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
-                var jsonEx = JsonConvert.SerializeObject(ex);
-                Log.Information($"{jsonEx}");
+                Log.Information($"{JsonConvert.SerializeObject(ex)}");
                 return new CreateOrUpdateInvoiceResponse() { Status = "failure", Error = ex.Message, Data = null };
             }
         }
@@ -198,8 +196,7 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
-                var jsonEx = JsonConvert.SerializeObject(ex);
-                Log.Information($"{jsonEx}");
+                Log.Information($"{JsonConvert.SerializeObject(ex)}");
                 Console.WriteLine($"General error: {ex.Message}");
                 return "failure";
             }
@@ -207,13 +204,12 @@ namespace EInvoiceQuickBooks.Services
 
         #region QB Token
 
-        // Get Access Token from QB
+        // Get Access Token using realmId from QB
         public async Task<string> GetAccessToken(string realmId)
         {
             try
             {
                 var dbrefreshToken = await GetDbRefreshToken(realmId);
-
                 var oauth2Client = new OAuth2Client(clientId, clientKey, "https://developer.intuit.com/v2/OAuth2Playground/RedirectUrl", environment);
 
                 var tokenResp = await oauth2Client.RefreshTokenAsync(dbrefreshToken);
@@ -241,7 +237,7 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
-                Log.Information($"Error in GetAccessToken - {ex}");
+                Log.Information($"Error in GetAccessToken - {JsonConvert.SerializeObject(ex)}");
                 throw;
             }
         }
@@ -250,7 +246,7 @@ namespace EInvoiceQuickBooks.Services
 
         #region QB Company Details
 
-        // Get company info from realmId
+        // Get company info using realmId from QB
         public async Task<Company> GetCompanyInfo(string realmId)
         {
             try
@@ -269,8 +265,7 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
-                var jsonEx = JsonConvert.SerializeObject(ex);
-                Log.Information($"{jsonEx}");
+                Log.Information($"{JsonConvert.SerializeObject(ex)}");
                 throw;
             }
         }
@@ -365,9 +360,9 @@ namespace EInvoiceQuickBooks.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"An error occurred: {ex.Message}");
-                Log.Information($"An error occurred: {ex.Message}");
-                return ex.Message;
+                Console.WriteLine($"Exception in GetDbRefreshToken: {JsonConvert.SerializeObject(ex)}");
+                Log.Information($"Exception in GetDbRefreshToken: {JsonConvert.SerializeObject(ex)}");
+                return "exception";
             }
         }
 
@@ -387,14 +382,24 @@ namespace EInvoiceQuickBooks.Services
                 if (response.IsSuccessStatusCode)
                 {
                     var responsec = JsonConvert.DeserializeObject<SubmitDocumentResponse>(content);
-
-                    return (LhdnCompany)responsec.Data;
+                    if (responsec?.Data != null)
+                    {
+                        var lhdnCompany = JsonConvert.DeserializeObject<LhdnCompany>(responsec.Data.ToString()!);
+                        return lhdnCompany;
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("Data is null or invalid.");
+                    }
+                    //return (LhdnCompany)responsec.Data;
                 }
-                return new LhdnCompany();
+                Log.Information($"Error in GetLhdnCompanyInfo - {JsonConvert.SerializeObject(content)}");
+                return null;
             }
             catch (Exception ex)
             {
-                throw;
+                Log.Error($"Exception in GetLhdnCompanyInfo {JsonConvert.SerializeObject(ex)}");
+                return null;
             }
         }
 
@@ -416,14 +421,24 @@ namespace EInvoiceQuickBooks.Services
                 if (response.IsSuccessStatusCode)
                 {
                     var responsec = JsonConvert.DeserializeObject<SubmitDocumentResponse>(content);
-
-                    return (LhdnParticipant)responsec.Data;
+                    if (responsec?.Data != null)
+                    {
+                        var lhdnParticipent = JsonConvert.DeserializeObject<LhdnParticipant>(responsec.Data.ToString()!);
+                        return lhdnParticipent;
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("Data is null or invalid.");
+                    }
+                    //return (LhdnParticipant)responsec.Data;
                 }
-                return new LhdnParticipant();
+                Log.Information($"Error in GetCustomerDetails - {content}");
+                return null;
             }
             catch (Exception ex)
             {
-                throw;
+                Log.Error($"Exception in GetCustomerDetails {ex}");
+                return null;
             }
         }
 
@@ -659,11 +674,14 @@ namespace EInvoiceQuickBooks.Services
                     return prettyJson;
                 }
                 var errorContent = await response.Content.ReadAsStringAsync();
-
+                Log.Error($"Error in GetDBInvoice - {errorContent}");
+                Console.WriteLine($"Error in GetDBInvoice - {errorContent}");
                 return string.Empty;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Log.Information($"An error occurred in GetDBInvoice : {ex}");
+                Console.WriteLine($"An error occurred in GetDBInvoice : {ex}");
                 return string.Empty;
             }
         }
@@ -739,12 +757,17 @@ namespace EInvoiceQuickBooks.Services
                 request.Content = content;
 
                 var response = await client.SendAsync(request);
-                return await response.Content.ReadAsStringAsync();
+                var responseContent = await response.Content.ReadAsStringAsync();
+                if (response.IsSuccessStatusCode)
+                {
+                    return responseContent;
+                }
+                Log.Error($"Error in ProcessInvoiceMethod (Email PdF Invoice) - {responseContent}");
+                return responseContent;
             }
             catch (Exception ex)
             {
-                var jsonEx = JsonConvert.SerializeObject(ex);
-                Log.Information($"{jsonEx}");
+                Log.Information($"{JsonConvert.SerializeObject(ex)}");
                 throw;
             }
         }
