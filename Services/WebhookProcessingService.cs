@@ -151,7 +151,7 @@ namespace EInvoiceQuickBooks.Services
                                                     },
                                                     new Intuit.Ipp.Data.CustomField
                                                     {
-                                                        DefinitionId = "2",
+                                                        DefinitionId = "3",
                                                         Name = "Invoice Sent SyncToken",
                                                         Type =CustomFieldTypeEnum.StringType,
                                                         AnyIntuitObject = (Convert.ToInt32(syncToken) + 1).ToString()
@@ -251,7 +251,7 @@ namespace EInvoiceQuickBooks.Services
                                                         },
                                                         new Intuit.Ipp.Data.CustomField
                                                         {
-                                                            DefinitionId = "2",
+                                                            DefinitionId = "3",
                                                             Name = "Invoice Sent SyncToken",
                                                             Type =CustomFieldTypeEnum.StringType,
                                                             AnyIntuitObject = (Convert.ToInt32(syncToken) + 1).ToString()
@@ -343,7 +343,7 @@ namespace EInvoiceQuickBooks.Services
                                                             },
                                                             new Intuit.Ipp.Data.CustomField
                                                             {
-                                                                DefinitionId = "2",
+                                                                DefinitionId = "3",
                                                                 Name = "Invoice Sent SyncToken",
                                                                 Type =CustomFieldTypeEnum.StringType,
                                                                 AnyIntuitObject = (Convert.ToInt32(syncToken) + 1).ToString()
