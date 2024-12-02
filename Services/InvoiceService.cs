@@ -487,11 +487,11 @@ namespace EInvoiceQuickBooks.Services
 
                 var jsonString = await response.Content.ReadAsStringAsync();
                 JObject jsonObj = JObject.Parse(jsonString);
-                if (jsonObj != null && jsonObj["data"] != null && jsonObj["data"].Type == JTokenType.Object)
+                if (jsonObj != null && jsonObj["data"] != null && jsonObj?["data"]?.Type == JTokenType.Object)
                 {
                     var dataObj = jsonObj["data"] as JObject;
 
-                    if (dataObj["invoice"] != null && !string.IsNullOrEmpty(dataObj["invoice"].ToString()))
+                    if (dataObj?["invoice"] != null && !string.IsNullOrEmpty(dataObj?["invoice"]?.ToString()))
                     {
                         return 1;
                     }
@@ -529,7 +529,7 @@ namespace EInvoiceQuickBooks.Services
                     string formattedJson = Regex.Unescape(quickBookDetailsJsonString).Trim('"');
 
                     var jsonObject = JsonConvert.DeserializeObject<JObject>(formattedJson);
-                    if (jsonObject["CurrencyRef"]?["Value"] != null)
+                    if (jsonObject?["CurrencyRef"]?["Value"] != null)
                     {
                         jsonObject["CurrencyRef"]["value"] = jsonObject["CurrencyRef"]["Value"];
 
@@ -673,6 +673,7 @@ namespace EInvoiceQuickBooks.Services
 
                     return prettyJson;
                 }
+
                 var errorContent = await response.Content.ReadAsStringAsync();
                 Log.Error($"Error in GetDBInvoice - {errorContent}");
                 Console.WriteLine($"Error in GetDBInvoice - {errorContent}");
@@ -693,7 +694,8 @@ namespace EInvoiceQuickBooks.Services
             {
                 using (var client = new HttpClient())
                 {
-                    var requestUrl = $"{lhdnBaseUrl}/eInvoiceCreateRequest";
+                    //var requestUrl = $"{lhdnBaseUrl}/eInvoiceCreateRequest";
+                    var requestUrl = $"{lhdnBaseUrl}/QBeInvoiceCreateRequest";
                     var request = new HttpRequestMessage(HttpMethod.Post, requestUrl)
                     {
                         Content = new StringContent(

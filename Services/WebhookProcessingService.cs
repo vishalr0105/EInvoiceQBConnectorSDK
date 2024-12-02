@@ -65,11 +65,11 @@ namespace EInvoiceQuickBooks.Services
             catch (TaskCanceledException ex)
             {
                 // Handle the cancellation gracefully.
-                Log.Information($"Task was canceled due to stopping request.\n {ex}");
+                Log.Information($"Task was canceled due to stopping request.\n {JsonConvert.SerializeObject(ex)}");
             }
             catch (Exception ex)
             {
-                Log.Error($"An error occurred while processing webhook: {ex.Message}");
+                Log.Error($"An error occurred while processing webhook: {JsonConvert.SerializeObject(ex)}");
             }
         }
 
@@ -656,7 +656,7 @@ namespace EInvoiceQuickBooks.Services
                     SellerCityName = lhdnCompany.City,
                     SellerState = lhdnCompany.State,
                     SellerCountry = lhdnCompany.Country,
-                    SellerBusinessActivityDescription = null,
+                    SellerBusinessActivityDescription = lhdnCompany.ClassificationName,
                     SellerMSIC = null,
                     BuyerName = lhdnParticipent.ParticipantName,
                     BuyerTIN = lhdnParticipent.Tin,
