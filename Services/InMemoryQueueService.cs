@@ -3,7 +3,7 @@
     public interface IQueueService
     {
         void Enqueue(string payload);
-        string Dequeue();
+        string? Dequeue();
         bool HasItems();
     }
 
@@ -19,7 +19,7 @@
             }
         }
 
-        public string Dequeue()
+        public string? Dequeue()
         {
             lock (_queue)
             {

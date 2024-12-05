@@ -367,7 +367,7 @@ namespace EInvoiceQuickBooks.Services
         }
 
         // Get LHDN Company Information
-        public async Task<LhdnCompany> GetLhdnCompanyInfo(string token)
+        public async Task<LhdnCompany?> GetLhdnCompanyInfo(string token)
         {
             try
             {
@@ -404,7 +404,7 @@ namespace EInvoiceQuickBooks.Services
         }
 
         // Get LHDN Participent Information
-        public async Task<LhdnParticipant> GetCustomerDetails(string token, string emailAddress)
+        public async Task<LhdnParticipant?> GetCustomerDetails(string token, string emailAddress)
         {
             try
             {
@@ -705,7 +705,7 @@ namespace EInvoiceQuickBooks.Services
                     };
 
                     request.Headers.Add("accept", "*/*");
-                    request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
                     var response = await client.SendAsync(request);
 
