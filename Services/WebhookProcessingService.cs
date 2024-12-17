@@ -524,6 +524,7 @@ namespace EInvoiceQuickBooks.Services
 
         private async Task<string> ProcessMethod(Invoice originalInvoice, string invoiceId, int isResend, string realmId)
         {
+            await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(30));
             try
             {
                 using (var scope = _serviceProvider.CreateScope())
@@ -599,7 +600,7 @@ namespace EInvoiceQuickBooks.Services
                             return "exception";
                         }
                         var jsonrequest = JObject.FromObject(req);
-                        var sjkfnf = jsonrequest.ToString();
+                        var chkjson = jsonrequest.ToString();
                         resProcessInvoice = await invoiceService.ProcessInvoiceMethod(requestProgress, tokenResp);
                     }
 
@@ -635,7 +636,7 @@ namespace EInvoiceQuickBooks.Services
                     eInvoiceDate = DateTime.Now.ToString("yyyy-MM-dd"),//"2023-12-29",
                     eInvoiceTime = DateTime.Now.ToString("HH:mm:ss") + "Z",//"03:16:56Z",
                     InvoiceCurrencyCode = invoice.CurrencyRef.Value, //"MYR",
-                                                                     //CurrencyExchangeRate = "1.00000", // No need
+                    //CurrencyExchangeRate = "1.00000", // No need
                     PaymentMode = lhdnCompany.PaymentMeansCode,
                     PaymentTerms = lhdnCompany.DefaultPaymentTerms,
                     //PaymentDueDate = invoice.DueDate.ToString("yyyy-MM-dd"), // No need
@@ -673,18 +674,14 @@ namespace EInvoiceQuickBooks.Services
                     BuyerCityName = lhdnParticipent.City,
                     BuyerState = lhdnParticipent.State,
                     BuyerCountry = lhdnParticipent.Country,
-
                     SumOfInvoiceLineNetAmount = invoice.TotalAmt.ToString(), //without tax
-
                     SumOfAllowancesOnDocumentLevel = "0.00",
                     TotalFeeOrChargeAmount = "0.00",
                     TotalExcludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0", //SumOfInvoiceLineNetAmount
-                    TotalIncludingTax = invoice.TotalAmt.ToString("0.0") ?? "0.0", //SumOfInvoiceLineNetAmount + tax
-
+                    TotalIncludingTax = GetTotalIncludingTax(invoice), //invoice.TotalAmt.ToString("0.0") ?? "0.0", //SumOfInvoiceLineNetAmount + tax
                     RoundingAmount = "0.02",
                     PaidAmount = "0.00",
-                    TotalPayableAmount = invoice.TotalAmt.ToString("0.0") ?? "0.0", //TotalIncludingTax
-
+                    TotalPayableAmount = GetTotalIncludingTax(invoice), //invoice.TotalAmt.ToString("0.0") ?? "0.0", //GetTotalIncludingTax(TotalAmt)
                     ReferenceNumberOfCustomsFormNo1ID = null,
                     ReferenceNumberOfCustomsFormNo1DocumentType = null,
                     Incoterms = null, //"DDP",
@@ -699,9 +696,7 @@ namespace EInvoiceQuickBooks.Services
                     DetailsOfOtherChargesChargeIndicator = null,
                     DetailsOfOtherChargesAmount = null,
                     DetailsOfOtherChargesAllowanceChargeReason = null,
-
-                    TotalNetAmount = invoice.TotalAmt.ToString("0.0") ?? "0.0", //TotalIncludingTax
-
+                    TotalNetAmount = GetTotalIncludingTax(invoice), // invoice.TotalAmt.ToString("0.0") ?? "0.0", //TotalIncludingTax
                     InvoiceLine = GetLines(invoice, lhdnCompany),
                     isPDF = false,
                     OutputFormat = "json",
@@ -791,7 +786,35 @@ namespace EInvoiceQuickBooks.Services
             //}
             #endregion
 
+            #region accounting@nexright.com
             // accounting@nexright.com
+            //switch (txnTaxCodeRef.Value)
+            //{
+            //    case "4":
+            //        return "SST - High-Value Goods Tax";
+            //    case "5":
+            //        return "SST - Not Applicable";
+            //    case "6":
+            //        return "SST - Sales Tax";
+            //    case "7":
+            //        return "SST - Sales Tax on Low Value Goods";
+            //    case "8":
+            //        return "SST - Service Tax";
+            //    case "9":
+            //        return "SST - Tax exemption";
+            //    case "10":
+            //        return "SST - Tourism Tax";
+            //    case "E":
+            //    case "11":
+            //        return "SST - Tax exemption";
+            //    default:
+            //        return "NON";
+            //}
+            #endregion
+
+            #region info@advintek.com
+            // info@advintek.com
+
             switch (txnTaxCodeRef.Value)
             {
                 case "4":
@@ -809,11 +832,11 @@ namespace EInvoiceQuickBooks.Services
                 case "10":
                     return "SST - Tourism Tax";
                 case "E":
-                case "11":
                     return "SST - Tax exemption";
                 default:
                     return "NON";
             }
+            #endregion
         }
 
         private string GetTaxCategoryId(string value)
@@ -835,14 +858,49 @@ namespace EInvoiceQuickBooks.Services
                 case "SST - Tourism Tax":
                     return "03";
                 default:
-                    return "Unknown"; // Handle unexpected input
+                    return "SST - Tax exemption"; // Handle unexpected input
             }
         }
 
-        private string GetTaxCategoryTaxAmount(decimal totalAmt, decimal taxPercent)
+        private string GetTaxCategoryTaxAmount(decimal totalAmt, decimal taxPercent = 1)
         {
             var res = totalAmt * (taxPercent / 100);
             return res.ToString();
+        }
+
+        private string GetTotalIncludingTax(Invoice invoice)
+        {
+            if (invoice.TxnTaxDetail?.TaxLine == null)
+            {
+                return invoice.TotalAmt.ToString();
+            }
+            var taxDetail = invoice.TxnTaxDetail?.TaxLine?.FirstOrDefault().AnyIntuitObject;
+            string totalTaxableAmountPerTaxType = "";
+            string taxCategoryId = "";
+            decimal taxPercent = 0.0m;
+
+            if (taxDetail is TaxLineDetail taxLineDetail)
+            {
+                // Extract UnitPrice if available
+                if (taxLineDetail.NetAmountTaxable is decimal netAmountTaxable)
+                {
+                    totalTaxableAmountPerTaxType = netAmountTaxable.ToString();
+                }
+
+                if (taxLineDetail.TaxRateRef is ReferenceType taxRateRef)
+                {
+                    taxCategoryId = taxRateRef.Value;
+                }
+                if (taxLineDetail.TaxPercent is decimal taxpercent)
+                {
+                    taxPercent = taxpercent;
+                }
+            }
+
+            var tax = invoice.TotalAmt * (taxPercent / 100);
+            var totalAmtIncludingTax = invoice.TotalAmt + tax;
+
+            return totalAmtIncludingTax.ToString();
         }
 
         private List<Models1.LineItem> GetLines(Invoice invoice, LhdnCompany lhdnCompany)
@@ -857,53 +915,83 @@ namespace EInvoiceQuickBooks.Services
 
                 string unitPrice = "0";
                 string quantity = "0";
-
-                if (line.AnyIntuitObject is SalesItemLineDetail salesItemLineDetail)
+                if (line.DetailType != LineDetailTypeEnum.SubTotalLineDetail)
                 {
-                    // Extract UnitPrice if available
-                    if (salesItemLineDetail.AnyIntuitObject is decimal price)
+                    if (line.AnyIntuitObject is SalesItemLineDetail salesItemLineDetail)
                     {
-                        unitPrice = price.ToString();
-                    }
+                        // Extract UnitPrice if available
+                        if (salesItemLineDetail.AnyIntuitObject is decimal price)
+                        {
+                            unitPrice = price.ToString();
+                        }
 
-                    if (salesItemLineDetail.Qty is decimal Qty)
+                        if (salesItemLineDetail.Qty is decimal Qty)
+                        {
+                            quantity = Qty.ToString();
+                        }
+                    }
+                    if (line.AnyIntuitObject is not SubTotalLineDetail subTotalLineDetail)
                     {
-                        quantity = Qty.ToString();
+                        res.Add(new Models1.LineItem
+                        {
+                            LineId = String.IsNullOrEmpty(line.Id) ? i.ToString() : line.Id,
+                            ClassificationClass = "CLASS",
+                            ClassificationCode = "022",
+                            ProductID = line.Id,
+                            Description = String.IsNullOrEmpty(line.Description) ? "description" : line.Description,
+                            ProductTariffCode = null,
+                            ProductTariffClass = null,
+                            Country = lhdnCompany.Country,
+                            UnitPrice = unitPrice,
+                            Quantity = quantity,
+                            Measurement = null, // Tocheck
+                            Subtotal = GetTotalIncludingTax(invoice), // invoice.TotalAmt.ToString() ?? "0", // UnitPrice * Quantity + TaxAmount
+                            SSTTaxCategory = null,
+                            TaxType = invoice.TxnTaxDetail?.TxnTaxCodeRef == null ? "06" : GetTaxTypeForLineItem(invoice.TxnTaxDetail?.TxnTaxCodeRef), // "06",// invoice.TxnTaxDetail?.TxnTaxCodeRef?.Value ??
+                            TaxRate = "0.0",
+                            TaxAmount = "0",
+                            DetailsOfTaxExemption = null,
+                            AmountExemptedFromTax = null,
+                            TotalExcludingTax = GetTotalIncludingTax(invoice), // invoice.TotalAmt.ToString("0.00"), // Subtotal
+                            InvoiceLineNetAmount = GetTotalIncludingTax(invoice), // invoice.TotalAmt.ToString("0.00"), // Subtotal
+                            NettAmount = GetTotalIncludingTax(invoice), // invoice.TotalAmt.ToString("0.00"), // Subtotal
+                            TaxCategorySchemeID = "UN/ECE 5153",
+                            TaxCategorySchemeAgencyID = "6",
+                            TaxCategorySchemeAgencyCode = "OTH"
+                        });
                     }
                 }
-
-                res.Add(new Models1.LineItem
-                {
-                    LineId = String.IsNullOrEmpty(line.Id) ? i.ToString() : line.Id,
-                    ClassificationClass = "CLASS",
-                    ClassificationCode = "022",
-                    ProductID = line.Id,
-                    Description = String.IsNullOrEmpty(line.Description) ? "description" : line.Description,
-                    ProductTariffCode = null,
-                    ProductTariffClass = null,
-                    Country = lhdnCompany.Country,
-                    UnitPrice = unitPrice,
-                    Quantity = quantity,
-
-                    Measurement = null,//Tocheck
-
-                    Subtotal = invoice.TotalAmt.ToString() ?? "0",//UnitPrice * Quantity + TaxAmount
-                    SSTTaxCategory = null,
-                    TaxType = "06",//invoice.TxnTaxDetail?.TxnTaxCodeRef?.Value ??
-                    TaxRate = "0.0",
-                    TaxAmount = "0",
-                    DetailsOfTaxExemption = null,
-                    AmountExemptedFromTax = null,
-                    TotalExcludingTax = invoice.TotalAmt.ToString("0.00"),//Subtotal
-                    InvoiceLineNetAmount = invoice.TotalAmt.ToString("0.00"),//Subtotal
-                    NettAmount = invoice.TotalAmt.ToString("0.00"),//Subtotal
-                    TaxCategorySchemeID = "UN/ECE 5153",
-                    TaxCategorySchemeAgencyID = "6",
-                    TaxCategorySchemeAgencyCode = "OTH"
-                });
             }
-
             return res;
+        }
+
+        private string GetTaxTypeForLineItem(ReferenceType txnTaxCodeRef)
+        {
+            if (txnTaxCodeRef.Value == null)
+            {
+                return "E";
+            }
+            switch (txnTaxCodeRef.Value)
+            {
+                case "4":
+                    return "04"; // "SST - High-Value Goods Tax";
+                case "5":
+                    return "06"; // "SST - Not Applicable";
+                case "6":
+                    return "01"; // "SST - Sales Tax";
+                case "7":
+                    return "05"; // "SST - Sales Tax on Low Value Goods";
+                case "8":
+                    return "02"; // "SST - Service Tax";
+                case "9":
+                    return "E"; // "SST - Tax exemption";
+                case "10":
+                    return "03"; // "SST - Tourism Tax";
+                case "E":
+                    return "SST - Tax exemption";
+                default:
+                    return "NON";
+            }
         }
 
         private object GetQuickBookDetails(Invoice invoice)

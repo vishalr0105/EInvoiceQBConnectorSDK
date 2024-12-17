@@ -694,7 +694,6 @@ namespace EInvoiceQuickBooks.Services
             {
                 using (var client = new HttpClient())
                 {
-                    //var requestUrl = $"{lhdnBaseUrl}/eInvoiceCreateRequest";
                     var requestUrl = $"{lhdnBaseUrl}/QBeInvoiceCreateRequest";
                     var request = new HttpRequestMessage(HttpMethod.Post, requestUrl)
                     {
