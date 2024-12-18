@@ -191,7 +191,7 @@ namespace EInvoiceQuickBooks.Services
                                                 if (res == "success")
                                                 {
                                                     Log.Information($"Invoice sent successfully - {invoiceId}");
-                                                    Console.WriteLine($"Invoice Resent successfully - {invoiceId}");
+                                                    Console.WriteLine($"Invoice sent successfully - {invoiceId}");
                                                 }
                                                 else if (res == "failure")
                                                 {
@@ -524,7 +524,7 @@ namespace EInvoiceQuickBooks.Services
 
         private async Task<string> ProcessMethod(Invoice originalInvoice, string invoiceId, int isResend, string realmId)
         {
-            await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(30));
+            //await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(30));
             try
             {
                 using (var scope = _serviceProvider.CreateScope())
@@ -537,6 +537,7 @@ namespace EInvoiceQuickBooks.Services
                     var requestProgress = new ProcessRequest()
                     {
                         base64Pdf = base64PdfString.ToString(),
+                        invoiceNo = invoiceId,
                         emailAddress = originalEmail == null ? dummyEmail : originalEmail,
                     };
 
@@ -574,6 +575,8 @@ namespace EInvoiceQuickBooks.Services
                             if (!submitResp.Contains("LHDN access token not found"))
                             {
                                 count = 6;
+                                var jsonrequest = JObject.FromObject(req);
+                                var chkjson = jsonrequest.ToString();
                             }
                             count++;
                         } while (submitResp.Contains("LHDN access token not found") || count < 5);
@@ -595,12 +598,12 @@ namespace EInvoiceQuickBooks.Services
                         {
                             return $"A LongId was not found for this UUID";
                         }
-                        else if (!submitResp.ToLower().Contains("exception"))
+                        else if (submitResp.ToLower().Contains("exception"))
                         {
                             return "exception";
                         }
-                        var jsonrequest = JObject.FromObject(req);
-                        var chkjson = jsonrequest.ToString();
+                        //var jsonrequest = JObject.FromObject(req);
+                        //var chkjson = jsonrequest.ToString();
                         resProcessInvoice = await invoiceService.ProcessInvoiceMethod(requestProgress, tokenResp);
                     }
 
@@ -720,7 +723,17 @@ namespace EInvoiceQuickBooks.Services
         {
             if (invoice.TxnTaxDetail?.TaxLine == null)
             {
-                return new DocTaxTotal { };
+                return new DocTaxTotal
+                {
+                    TaxCategoryTaxAmountInAccountingCurrency = invoice.TotalAmt.ToString() ,
+                    TotalTaxableAmountPerTaxType = invoice.TotalAmt.ToString(), //"1080.00",
+                    TaxCategoryId =  "06", //"06",
+                    TaxCategoryTaxSchemeId = "UN/ECE 5153",
+                    TaxCategorySchemeAgencyID = "6",
+                    TaxCategorySchemeAgencyCode = "OTH",
+                    TaxCategoryRate = "0.0",
+                    DetailsOfTaxExemption = ""
+                };
             }
             var taxDetail = invoice.TxnTaxDetail?.TaxLine?.FirstOrDefault().AnyIntuitObject;
             string totalTaxableAmountPerTaxType = "";
@@ -750,11 +763,11 @@ namespace EInvoiceQuickBooks.Services
             {
                 TaxCategoryTaxAmountInAccountingCurrency = GetTaxCategoryTaxAmount(invoice.TotalAmt, taxPercent), //"80"
                 TotalTaxableAmountPerTaxType = totalTaxableAmountPerTaxType, //"1080.00",
-                TaxCategoryId = GetTaxCategoryId(txnTaxCodeRef), //"06",
+                TaxCategoryId = GetTaxCategoryId(txnTaxCodeRef) == null ? "06" : GetTaxCategoryId(txnTaxCodeRef), //"06",
                 TaxCategoryTaxSchemeId = "UN/ECE 5153",
                 TaxCategorySchemeAgencyID = "6",
                 TaxCategorySchemeAgencyCode = "OTH",
-                TaxCategoryRate = taxPercent.ToString(),
+                TaxCategoryRate = taxPercent == null ? "0.0" : taxPercent.ToString(),
                 DetailsOfTaxExemption = ""
             };
         }
@@ -920,16 +933,14 @@ namespace EInvoiceQuickBooks.Services
                     if (line.AnyIntuitObject is SalesItemLineDetail salesItemLineDetail)
                     {
                         // Extract UnitPrice if available
-                        if (salesItemLineDetail.AnyIntuitObject is decimal price)
-                        {
-                            unitPrice = price.ToString();
-                        }
+                        unitPrice = salesItemLineDetail.AnyIntuitObject.ToString();
 
                         if (salesItemLineDetail.Qty is decimal Qty)
                         {
                             quantity = Qty.ToString();
                         }
                     }
+                    var subtotal = (Convert.ToInt32(unitPrice) * Convert.ToInt32(quantity)).ToString();
                     if (line.AnyIntuitObject is not SubTotalLineDetail subTotalLineDetail)
                     {
                         res.Add(new Models1.LineItem
@@ -945,7 +956,7 @@ namespace EInvoiceQuickBooks.Services
                             UnitPrice = unitPrice,
                             Quantity = quantity,
                             Measurement = null, // Tocheck
-                            Subtotal = GetTotalIncludingTax(invoice), // invoice.TotalAmt.ToString() ?? "0", // UnitPrice * Quantity + TaxAmount
+                            Subtotal = subtotal, // invoice.TotalAmt.ToString() ?? "0", // UnitPrice * Quantity + TaxAmount
                             SSTTaxCategory = null,
                             TaxType = invoice.TxnTaxDetail?.TxnTaxCodeRef == null ? "06" : GetTaxTypeForLineItem(invoice.TxnTaxDetail?.TxnTaxCodeRef), // "06",// invoice.TxnTaxDetail?.TxnTaxCodeRef?.Value ??
                             TaxRate = "0.0",
@@ -953,7 +964,7 @@ namespace EInvoiceQuickBooks.Services
                             DetailsOfTaxExemption = null,
                             AmountExemptedFromTax = null,
                             TotalExcludingTax = GetTotalIncludingTax(invoice), // invoice.TotalAmt.ToString("0.00"), // Subtotal
-                            InvoiceLineNetAmount = GetTotalIncludingTax(invoice), // invoice.TotalAmt.ToString("0.00"), // Subtotal
+                            InvoiceLineNetAmount = GetTotalIncludingTax(invoice), // invoice.TotalAmt.ToString("0.00"), // Subtotal + tax
                             NettAmount = GetTotalIncludingTax(invoice), // invoice.TotalAmt.ToString("0.00"), // Subtotal
                             TaxCategorySchemeID = "UN/ECE 5153",
                             TaxCategorySchemeAgencyID = "6",
